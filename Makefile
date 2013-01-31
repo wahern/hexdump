@@ -15,7 +15,7 @@ LUAC = $(prefix)/bin/luac
 CPPFLAGS += -I$(luainclude)
 
 ifeq ($(VENDOR.CC), sunpro)
-CFLAGS = -g -xcode=pic13
+CFLAGS = -g
 SOFLAGS = -xcode=pic13
 else
 CFLAGS = -std=c99 -g -O2 -Wall -Wextra -Werror -Wno-unused-variable -Wno-unused-parameter
