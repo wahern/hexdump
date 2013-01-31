@@ -31,7 +31,7 @@
 
 #include <stdint.h> /* int64_t */
 #include <stdio.h>  /* FILE fprintf(3) snprintf(3) */
-#include <stdlib.h> /* malloc(3) realloc(3) free(3) */
+#include <stdlib.h> /* malloc(3) realloc(3) free(3) abort(3) */
 
 #include <string.h> /* memset(3) memmove(3) */
 
@@ -48,7 +48,7 @@
 
 #define OOPS(...) do { \
 	SAY(__VA_ARGS__); \
-	__builtin_trap(); \
+	abort(); \
 } while (0)
 
 
@@ -63,11 +63,19 @@
 #define countof(a) (sizeof (a) / sizeof *(a))
 
 #ifndef NOTUSED
+#if __GNUC__
 #define NOTUSED __attribute__((unused))
+#else
+#define NOTUSED
+#endif
 #endif
 
 #ifndef NORETURN
+#if __GNUC__
 #define NORETURN __attribute__((noreturn))
+#else
+#define NORETURN
+#endif
 #endif
 
 #define NARG_(a, b, c, d, e, f, g, h, N,...) N
@@ -672,7 +680,7 @@ static void vm_conv(struct vm_state *M, int flags, int width, int prec, int fc, 
 #define CASE(op) XPASTE(OP_, op)
 #define NEXT goto *jump[M->code[++M->pc]]
 #else
-#define BEGIN exec: switch (M->code[M->pc]) { (void)0
+#define BEGIN exec: switch (M->code[M->pc]) {
 #define END } (void)0
 #define CASE(op) case XPASTE(OP_, op)
 #define NEXT ++M->pc; goto exec
