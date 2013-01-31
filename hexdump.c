@@ -1703,7 +1703,7 @@ int main(int argc, char **argv) {
 	size_t len;
 	int error;
 
-	while (-1 != (opt = getopt(argc, argv, "e:f:DVh"))) {
+	while (-1 != (opt = getopt(argc, argv, "e:f:oDVh"))) {
 		switch (opt) {
 		case 'e':
 			fmt = optarg;
@@ -1725,6 +1725,10 @@ int main(int argc, char **argv) {
 
 			break;
 		}
+		case 'o':
+			fmt = "\"%07.7_ao   \" 8/2 \" %06o \" \"\\n\"";
+
+			break;
 		case 'D':
 			dump = 1;
 
@@ -1745,6 +1749,7 @@ int main(int argc, char **argv) {
 				"hexdump [-e:f:DVh] [file ...]\n" \
 				"  -e FMT   hexdump string format\n" \
 				"  -f PATH  path to hexdump format file\n" \
+				"  -o       two-byte octal display\n" \
 				"  -D       dump the compiled machine\n" \
 				"  -V       print version\n" \
 				"  -h       print usage help\n" \
