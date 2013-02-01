@@ -281,6 +281,7 @@ NOTUSED static void vm_dump(struct vm_state *M, FILE *fp) {
 
 	for (unsigned pc = 0; pc < countof(M->code); pc++) {
 		enum vm_opcode op = M->code[pc];
+		unsigned n;
 
 		fprintf(fp, "%d: ", pc);
 
@@ -290,19 +291,21 @@ NOTUSED static void vm_dump(struct vm_state *M, FILE *fp) {
 
 			break;
 		case OP_I16:
-			fprintf(fp, "%s %u\n", vm_strop(op), (M->code[++pc] << 8) | M->code[++pc]);
-
-			break;
-		case OP_I32: {
-			unsigned n = (M->code[++pc] << 24)
-			           | (M->code[++pc] << 16)
-			           | (M->code[++pc] << 8)
-			           | (M->code[++pc] << 0);
+			n = M->code[++pc] << 8;
+			n |= M->code[++pc];
 
 			fprintf(fp, "%s %u\n", vm_strop(op), n);
 
 			break;
-		}
+		case OP_I32:
+			n = M->code[++pc] << 24;
+			n |= M->code[++pc] << 16;
+			n |= M->code[++pc] << 8;
+			n |= M->code[++pc] << 0;
+
+			fprintf(fp, "%s %u\n", vm_strop(op), n);
+
+			break;
 		case OP_PUTC: {
 			const char *txt = vm_strop(op);
 			int chr = M->code[++pc];
@@ -395,6 +398,7 @@ NOTUSED static int64_t vm_peek(struct vm_state *M, int i) {
 
 static void vm_exec(struct vm_state *M) {
 	enum vm_opcode op;
+	int64_t v;
 
 exec:
 	op = M->code[M->pc];
@@ -437,17 +441,21 @@ exec:
 
 		break;
 	case OP_I16:
-		vm_push(M, (M->code[++M->pc] << 8) | M->code[++M->pc]);
-
-		break;
-	case OP_I32: {
-		int64_t v = (M->code[++M->pc] << 24) | (M->code[++M->pc] << 16)
-		          | (M->code[++M->pc] << 8)  | (M->code[++M->pc] << 0);
+		v = M->code[++M->pc] << 8;
+		v |= M->code[++M->pc];
 
 		vm_push(M, v);
 
 		break;
-	}
+	case OP_I32:
+		v = M->code[++M->pc] << 24;
+		v = M->code[++M->pc] << 16;
+		v = M->code[++M->pc] << 8;
+		v |= M->code[++M->pc];
+
+		vm_push(M, v);
+
+		break;
 	case OP_NEG:
 		vm_push(M, -vm_pop(M));
 
@@ -948,9 +956,10 @@ int hxd_write(struct hexdump *X, const void *src, size_t len) {
 		if (X->vm.i.p < X->vm.i.pe)
 			break;
 
-		X->vm.i.p = 0;
+		X->vm.i.p = X->vm.i.base;
+		X->vm.pc = 0;
 		vm_exec(&X->vm);
-		X->vm.i.p = 0;
+		X->vm.i.p = X->vm.i.base;
 	}
 
 	return 0;
@@ -960,15 +969,20 @@ error:
 
 
 int hxd_flush(struct hexdump *X) {
+	unsigned char *pe;
 	int error;
 
 	if ((error = vm_enter(&X->vm)))
 		goto error;
 
 	if (X->vm.i.p > X->vm.i.base) {
-		X->vm.i.p = 0;
+		pe = X->vm.i.pe;
+		X->vm.i.pe = X->vm.i.p;
+		X->vm.i.p = X->vm.i.base;
+		X->vm.pc = 0;
 		vm_exec(&X->vm);
-		X->vm.i.p = 0;
+		X->vm.i.p = X->vm.i.base;
+		X->vm.i.pe = pe;
 	}
 
 	return 0;
@@ -1051,6 +1065,8 @@ int main(int argc, char **argv) {
 
 	while ((len = hxd_read(X, buf, sizeof buf)))
 		fwrite(buf, 1, len, stdout);
+
+	hxd_close(X);
 
 	return 0;
 } /* main() */
