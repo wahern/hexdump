@@ -23,6 +23,10 @@
  * USE OR OTHER DEALINGS IN THE SOFTWARE.
  * ==========================================================================
  */
+#if HEXDUMP_MAIN && !defined _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
+
 #include <limits.h> /* INT_MAX */
 
 #include <stdint.h> /* int64_t */
