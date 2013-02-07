@@ -1,7 +1,7 @@
 #include <limits.h> /* INT_MAX */
 
 #include <stdint.h> /* int64_t */
-#include <stdio.h>  /* FILE fprintf(3) */
+#include <stdio.h>  /* FILE fprintf(3) snprintf(3) */
 #include <stdlib.h> /* malloc(3) realloc(3) free(3) */
 
 #include <string.h> /* memset(3) memmove(3) */
@@ -267,7 +267,7 @@ struct vm_state {
 
 	struct {
 		unsigned char *base, *p, *pe;
-		unsigned blocks;
+		size_t address;
 		_Bool eof;
 	} i;
 
@@ -398,31 +398,82 @@ NOTUSED static int64_t vm_peek(struct vm_state *M, int i) {
 
 
 static void vm_conv(struct vm_state *M, int flags, int width, int prec, int fc, int64_t word) {
-	char fmt[32], buf[128];
+	char fmt[32], *fp, buf[128];
+	const char *s;
 	int i, len;
+
+	fp = fmt;
+
+	*fp++ = '%';
+
+	if (flags & F_HASH)
+		*fp++ = '#';
+	if (flags & F_ZERO)
+		*fp++ = '0';
+	if (flags & F_MINUS)
+		*fp++ = '-';
+	if (flags & F_PLUS)
+		*fp++ = '+';
+
+	*fp++ = '*';
+	*fp++ = '.';
+	*fp++ = '*';
 
 	if ((0xff & fc) == '_') {
 		switch (0xff & (fc >> 8)) {
+		case 'c':
+			s = "---";
+			prec = 3;
+			fc = 's';
+
+			break;
+		case 'p':
+			if (word <= 31 || word >= 127)
+				word = '.';
+
+			fc = 'c';
+
+			break;
+		case 'u':
+			s = "---";
+			prec = 3;
+			fc = 's';
+
+			break;
 		case 'd':
+			fc = 'd';
+			word = M->i.address + (M->i.p - M->i.base);
 		case 'o':
+			fc = 'o';
+			word = M->i.address + (M->i.p - M->i.base);
 		case 'x':
+			fc = 'x';
+			word = M->i.address + (M->i.p - M->i.base);
+			break;
 		case 'D':
 		case 'O':
 		case 'X':
-		case 'c':
-		case 'p':
-		case 'u':
-			/* FALL THROUGH */
 		default:
 			vm_putc(M, '?');
 			return;
 		}
-	}
-	
-	if (-1 == snprintf(fmt, sizeof fmt, "%%*.*%c", (0xff & fc)))
-		vm_throw(M, errno);
+	} else if (fc == 's') {
+		s = (const char *)M->i.p;
 
-	if (-1 == (len = snprintf(buf, sizeof buf, fmt, (int)MAX(width, 0), (int)MAX(prec, 0), (int)word)))
+		if (prec <= 0 || prec > M->i.pe - M->i.p)
+			prec = M->i.pe - M->i.p;
+	}
+
+	*fp++ = fc;
+	*fp = '\0';
+//SAY("fmt:%s prec:%d s:%s", fmt, prec, s);
+
+	if (fc == 's')
+		len = snprintf(buf, sizeof buf, fmt, (int)MAX(width, 0), (int)MAX(prec, 0), s);
+	else
+		len = snprintf(buf, sizeof buf, fmt, (int)MAX(width, 0), (int)MAX(prec, 0), (int)word);
+
+	if (-1 == len)
 		vm_throw(M, errno);
 
 	if (len >= (int)sizeof buf)
@@ -757,7 +808,7 @@ static void emit_unit(struct vm_state *M, int loop, int limit, size_t *blocksize
 				emit_jmp(M, &from);
 			}
 
-			emit_int(M, bytes);
+			emit_int(M, (fc == 's')? 0 : bytes);
 			emit_op(M, OP_READ);
 			emit_int(M, flags);
 			emit_int(M, MAX(0, width));
@@ -910,6 +961,7 @@ void hxd_close(struct hexdump *X) {
 
 
 void hxd_reset(struct hexdump *X) {
+	X->vm.i.address = 0;
 	X->vm.i.p = X->vm.i.base;
 	X->vm.o.p = X->vm.o.base;
 	X->vm.pc = 0;
@@ -1000,6 +1052,7 @@ int hxd_write(struct hexdump *X, const void *src, size_t len) {
 		X->vm.pc = 0;
 		vm_exec(&X->vm);
 		X->vm.i.p = X->vm.i.base;
+		X->vm.i.address += X->vm.blocksize;
 	}
 
 	return 0;
