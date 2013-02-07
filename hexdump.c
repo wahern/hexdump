@@ -133,13 +133,13 @@ width:
 		case 'a':
 			switch (*++*fmt) {
 			case 'd':
-				ch = ('_' & ('d' << 8));
+				ch = ('_' | ('d' << 8));
 				break;
 			case 'o':
-				ch = ('_' & ('o' << 8));
+				ch = ('_' | ('o' << 8));
 				break;
 			case 'x':
-				ch = ('_' & ('x' << 8));
+				ch = ('_' | ('x' << 8));
 				break;
 			default:
 				return 0;
@@ -149,13 +149,13 @@ width:
 		case 'A':
 			switch (*++*fmt) {
 			case 'd':
-				ch = ('_' & ('D' << 8));
+				ch = ('_' | ('D' << 8));
 				break;
 			case 'o':
-				ch = ('_' & ('O' << 8));
+				ch = ('_' | ('O' << 8));
 				break;
 			case 'x':
-				ch = ('_' & ('X' << 8));
+				ch = ('_' | ('X' << 8));
 				break;
 			default:
 				return 0;
@@ -163,15 +163,15 @@ width:
 			*bytes = 0;
 			break;
 		case 'c':
-			ch = ('_' & ('c' << 8));
+			ch = ('_' | ('c' << 8));
 			*bytes = 1;
 			break;
 		case 'p':
-			ch = ('_' & ('p' << 8));
+			ch = ('_' | ('p' << 8));
 			*bytes = 1;
 			break;
 		case 'u':
-			ch = ('_' & ('u' << 8));
+			ch = ('_' | ('u' << 8));
 			*bytes = 1;
 			break;
 		default:
@@ -267,6 +267,7 @@ struct vm_state {
 
 	struct {
 		unsigned char *base, *p, *pe;
+		unsigned blocks;
 		_Bool eof;
 	} i;
 
@@ -394,6 +395,42 @@ static int64_t vm_pop(struct vm_state *M) {
 NOTUSED static int64_t vm_peek(struct vm_state *M, int i) {
 	return (i < 0)? M->stack[M->sp + i] : M->stack[i];
 } /* vm_peek() */
+
+
+static void vm_conv(struct vm_state *M, int flags, int width, int prec, int fc, int64_t word) {
+	char fmt[32], buf[128];
+	int i, len;
+
+	if ((0xff & fc) == '_') {
+		switch (0xff & (fc >> 8)) {
+		case 'd':
+		case 'o':
+		case 'x':
+		case 'D':
+		case 'O':
+		case 'X':
+		case 'c':
+		case 'p':
+		case 'u':
+			/* FALL THROUGH */
+		default:
+			vm_putc(M, '?');
+			return;
+		}
+	}
+	
+	if (-1 == snprintf(fmt, sizeof fmt, "%%*.*%c", (0xff & fc)))
+		vm_throw(M, errno);
+
+	if (-1 == (len = snprintf(buf, sizeof buf, fmt, (int)MAX(width, 0), (int)MAX(prec, 0), (int)word)))
+		vm_throw(M, errno);
+
+	if (len >= (int)sizeof buf)
+		vm_throw(M, ENOMEM);
+
+	for (i = 0; i < len; i++)
+		vm_putc(M, buf[i]);
+} /* vm_conv() */
 
 
 static void vm_exec(struct vm_state *M) {
@@ -526,13 +563,13 @@ exec:
 		break;
 	}
 	case OP_CONV: {
-		int spec = vm_pop(M);
-		int width = vm_pop(M);
+		int fc = vm_pop(M);
 		int prec = vm_pop(M);
+		int width = vm_pop(M);
 		int flags = vm_pop(M);
 		int64_t word = vm_pop(M);
 
-		vm_putc(M, '?');
+		vm_conv(M, flags, width, prec, fc, word);
 
 //		fprintf(stdout, "(spec:%d width:%d prec:%d flags:%d words:0x%.8x)", spec, width, prec, flags, (int)word);
 
@@ -714,9 +751,11 @@ static void emit_unit(struct vm_state *M, int loop, int limit, size_t *blocksize
 
 			consumes += bytes;
 
-			emit_op(M, OP_COUNT);
-			emit_op(M, OP_NOT);
-			emit_jmp(M, &from);
+			if (bytes > 0) {
+				emit_op(M, OP_COUNT);
+				emit_op(M, OP_NOT);
+				emit_jmp(M, &from);
+			}
 
 			emit_int(M, bytes);
 			emit_op(M, OP_READ);
@@ -726,7 +765,8 @@ static void emit_unit(struct vm_state *M, int loop, int limit, size_t *blocksize
 			emit_int(M, fc);
 			emit_op(M, OP_CONV);
 
-			emit_link(M, from, M->pc);
+			if (bytes > 0)
+				emit_link(M, from, M->pc);
 
 			break;
 		}
