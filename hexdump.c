@@ -1,10 +1,16 @@
-
 #include <limits.h> /* INT_MAX */
+
 #include <stdint.h> /* int64_t */
 #include <stdio.h>  /* FILE fprintf(3) */
+#include <stdlib.h> /* malloc(3) realloc(3) free(3) */
+
 #include <string.h> /* memset(3) */
-#include <errno.h>  /* EOVERFLOW */
+
+#include <errno.h>  /* ERANGE errno */
+
 #include <setjmp.h> /* _setjmp(3) _longjmp(3) */
+
+#include "hexdump.h"
 
 
 #define SAY_(fmt, ...) fprintf(stderr, fmt "%s", __FILE__, __LINE__, __func__, __VA_ARGS__);
@@ -22,22 +28,9 @@
 
 #define countof(a) (sizeof (a) / sizeof *(a))
 
-#define XD_EBASE -(('D' << 24) | ('U' << 16) | ('M' << 8) | 'P')
-#define XD_ERROR(error) ((error) >= XD_EBASE && (error) < XD_ELAST)
-
-enum xd_errors {
-	XD_EFORMAT = XD_EBASE,
-	XD_ECOUNT,
-	XD_ELAST
-}; /* enum xd_errors */
-
-
-typedef struct hexdump {
-	struct {
-		unsigned short iterations;
-		unsigned short bytes;
-	} fmt[8][8];
-} XD;
+#ifndef NOTUSED
+#define NOTUSED __attribute__((unused))
+#endif
 
 
 static inline unsigned char skipws(const unsigned char **fmt, _Bool nl) {
@@ -257,7 +250,7 @@ static const char *vm_strop(enum vm_opcode op) {
 struct vm_state {
 	jmp_buf trap;
 
-	int blksize;
+	size_t blocksize;
 
 	int64_t stack[8];
 	int sp;
@@ -276,7 +269,9 @@ struct vm_state {
 }; /* struct vm_state */
 
 
-static void vm_dump(struct vm_state *M, FILE *fp) {
+NOTUSED static void vm_dump(struct vm_state *M, FILE *fp) {
+	fprintf(fp, "-- blocksize: %zu\n", M->blocksize);
+
 	for (unsigned pc = 0; pc < countof(M->code); pc++) {
 		enum vm_opcode op = M->code[pc];
 
@@ -307,15 +302,15 @@ static void vm_dump(struct vm_state *M, FILE *fp) {
 
 			switch (chr) {
 			case '\n':
-				fprintf(fp, "%s \\n\n", txt);
+				fprintf(fp, "%s \\n (0x0a)\n", txt);
 
 				break;
 			case '\r':
-				fprintf(fp, "%s \\r\n", txt);
+				fprintf(fp, "%s \\r (0x0d)\n", txt);
 
 				break;
 			case '\t':
-				fprintf(fp, "%s \\r\n", txt);
+				fprintf(fp, "%s \\t (0x09)\n", txt);
 
 				break;
 			default:
@@ -359,12 +354,12 @@ static int64_t vm_pop(struct vm_state *M) {
 } /* vm_pop() */
 
 
-__attribute__((unused)) static int64_t vm_peek(struct vm_state *M, int i) {
+NOTUSED static int64_t vm_peek(struct vm_state *M, int i) {
 	return (i < 0)? M->stack[M->sp + i] : M->stack[i];
 } /* vm_peek() */
 
 
-__attribute__((unused)) static int vm_exec(struct vm_state *M) {
+static int vm_exec(struct vm_state *M) {
 	enum vm_opcode op;
 
 exec:
@@ -376,7 +371,7 @@ exec:
 	case OP_NOOP:
 		break;
 	case OP_TRAP:
-		vm_throw(M, EFAULT);
+		vm_throw(M, HXD_EOOPS);
 
 		break;
 	case OP_PC:
@@ -660,9 +655,12 @@ static void emit_unit(struct vm_state *M, int loop, int limit, const unsigned ch
 
 			++*fmt;
 
-			if (!(fc = getcnv(&flags, &width, &prec, &bytes, fmt))) {
-				vm_throw(M, XD_EFORMAT);
-			} else if (fc == '%') {
+			if (!(fc = getcnv(&flags, &width, &prec, &bytes, fmt)))
+				vm_throw(M, HXD_EFORMAT);
+
+			--*fmt;
+
+			if (fc == '%') {
 				ch = '%';
 				goto copyout;
 			}
@@ -671,7 +669,7 @@ static void emit_unit(struct vm_state *M, int loop, int limit, const unsigned ch
 				bytes = MIN(limit - consumes, bytes);
 
 				if (!bytes) /* FIXME: define better error */
-					vm_throw(M, XD_ECOUNT);
+					vm_throw(M, HXD_EDRAINED);
 			}
 
 			consumes += bytes;
@@ -690,7 +688,7 @@ static void emit_unit(struct vm_state *M, int loop, int limit, const unsigned ch
 
 			emit_link(M, from, M->pc);
 
-			continue;
+			break;
 		}
 		case ' ': case '\t':
 			if (quoted || escaped)
@@ -762,6 +760,14 @@ copyout:
 	}
 
 epilog:
+	if (consumes < limit) {
+		emit_int(M, limit - consumes);
+		emit_op(M, OP_READ);
+		emit_op(M, OP_POP);
+
+		consumes = limit;
+	}
+
 	emit_op(M, OP_TRUE);
 	emit_jmp(M, &from);
 	emit_link(M, from, L1);
@@ -772,14 +778,50 @@ epilog:
 	if (loop > 1)
 		emit_op(M, OP_TRIM);
 
-	if (consumes * loop > M->blksize)
-		M->blksize = consumes * loop;
+	if ((size_t)(consumes * loop) > M->blocksize)
+		M->blocksize += (size_t)(consumes * loop);
 
 	return /* void */;
 } /* emit_unit() */
 
 
-static int parse(struct vm_state *M, const unsigned char *fmt) {
+struct hexdump {
+	struct vm_state vm;
+
+	char help[64];
+}; /* struct hexdump */
+
+
+struct hexdump *hxd_open(int *error) {
+	struct hexdump *X;
+
+	if (!(X = malloc(sizeof *X)))
+		goto syerr;
+
+	memset(X, 0, sizeof *X);
+
+	return X;	
+syerr:
+	*error = errno;
+
+	hxd_close(X);
+
+	return NULL;
+} /* hxd_open() */
+
+
+void hxd_close(struct hexdump *X) {
+	if (!X)
+		return /* void */;
+
+	free(X->vm.i.base);
+	free(X->vm.o.base);
+	free(X);
+} /* hxd_close() */
+
+
+int hxd_compile(struct hexdump *X, const const char *_fmt, int flags) {
+	const unsigned char *fmt = (const unsigned char *)_fmt;
 	int loop, bytes;
 
 	while (skipws(&fmt, 1)) {
@@ -794,11 +836,33 @@ static int parse(struct vm_state *M, const unsigned char *fmt) {
 
 		skipws(&fmt, 0);
 
-		emit_unit(M, loop, bytes, &fmt);
+		emit_unit(&X->vm, loop, bytes, &fmt);
 	}
 
 	return 0;
-} /* parse() */
+} /* hxd_compile() */
+
+
+const char *hxd_strerror(int error) {
+	static const char *txt[] = {
+		[HXD_EFORMAT - HXD_EBASE] = "invalid format",
+		[HXD_EDRAINED - HXD_EBASE] = "unit drains buffer",
+		[HXD_EOOPS - HXD_EBASE] = "machine traps",
+	};
+
+	if (error >= 0)
+		return strerror(error);
+
+	if (error >= HXD_EBASE && error < HXD_ELAST) {
+		error -= HXD_EBASE;
+
+		if (error < (int)countof(txt) && txt[error])
+			return txt[error];
+	}
+
+	return "unknown error (hexdump)";
+} /* hxd_strerror() */
+
 
 
 int main(int argc __attribute__((unused)), char **argv) {
@@ -824,7 +888,7 @@ int main(int argc __attribute__((unused)), char **argv) {
 	M.o.base = output;
 	M.o.pe =   &output[sizeof output];
 
-	while ((n = fread(input, 1, M.blksize, stdin))) {
+	while ((n = fread(input, 1, M.blocksize, stdin))) {
 		M.pc = 0;
 		M.i.p = M.i.base;
 		M.i.pe = &M.i.base[n];
