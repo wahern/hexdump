@@ -57,6 +57,8 @@ size_t hxd_blocksize(struct hexdump *);
 
 int hxd_write(struct hexdump *, const void *, size_t);
 
+int hxd_flush(struct hexdump *);
+
 size_t hxd_read(struct hexdump *, void *, size_t);
 
 

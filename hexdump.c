@@ -4,7 +4,7 @@
 #include <stdio.h>  /* FILE fprintf(3) */
 #include <stdlib.h> /* malloc(3) realloc(3) free(3) */
 
-#include <string.h> /* memset(3) */
+#include <string.h> /* memset(3) memmove(3) */
 
 #include <errno.h>  /* ERANGE errno */
 
@@ -16,6 +16,11 @@
 #define SAY_(fmt, ...) fprintf(stderr, fmt "%s", __FILE__, __LINE__, __func__, __VA_ARGS__);
 #define SAY(...) SAY_("@@ %s:%d:%s: " __VA_ARGS__, "\n");
 #define HAI SAY("HAI")
+
+#define OOPS(...) do { \
+	SAY(__VA_ARGS__); \
+	__builtin_trap(); \
+} while (0)
 
 
 #ifndef MIN
@@ -208,6 +213,7 @@ enum vm_opcode {
 	OP_CONV,  /* 5/0 | write conversion to output buffer */
 	OP_TRIM,  /* 0/0 | trim trailing white space from output buffer */
 	OP_JMP,   /* 2/0 | conditional jump to address */
+	OP_RESET, /* 0/0 | reset input buffer position */
 }; /* enum vm_opcode */
 
 
@@ -238,6 +244,7 @@ static const char *vm_strop(enum vm_opcode op) {
 		[OP_CONV]  = "CONV",
 		[OP_TRIM]  = "TRIM",
 		[OP_JMP]   = "JMP",
+		[OP_RESET] = "RESET",
 	};
 
 	if ((int)op >= 0 && op < (int)countof(txt) && txt[op])
@@ -339,9 +346,36 @@ done:
 } /* vm_dump() */
 
 
+#define vm_enter(M) _setjmp((M)->trap)
+
 static void vm_throw(struct vm_state *M, int error) {
 	_longjmp(M->trap, error);
 } /* vm_throw() */
+
+
+static void vm_putc(struct vm_state *M, unsigned char ch) {
+	unsigned char *tmp;
+	size_t size, p;
+
+	if (!(M->o.p < M->o.pe)) {
+		size = MAX(M->o.pe - M->o.base, 64);
+		p = M->o.p - M->o.base;
+
+		if (~size < size)
+			vm_throw(M, ENOMEM);
+
+		size *= 2;
+
+		if (!(tmp = realloc(M->o.base, size)))
+			vm_throw(M, errno);
+
+		M->o.base = tmp;
+		M->o.p = &tmp[p];
+		M->o.pe = &tmp[size];
+	}
+
+	*M->o.p++ = ch;
+} /* vm_putc() */
 
 
 static void vm_push(struct vm_state *M, int64_t v) {
@@ -359,7 +393,7 @@ NOTUSED static int64_t vm_peek(struct vm_state *M, int i) {
 } /* vm_peek() */
 
 
-static int vm_exec(struct vm_state *M) {
+static void vm_exec(struct vm_state *M) {
 	enum vm_opcode op;
 
 exec:
@@ -367,7 +401,7 @@ exec:
 
 	switch (op) {
 	case OP_HALT:
-		return 0;
+		return /* void */;
 	case OP_NOOP:
 		break;
 	case OP_TRAP:
@@ -479,10 +513,7 @@ exec:
 
 		break;
 	case OP_PUTC: {
-		unsigned char ch = M->code[++M->pc];
-
-		if (M->o.p < M->o.pe)
-			*M->o.p++ = ch;
+		vm_putc(M, M->code[++M->pc]);
 
 		break;
 	}
@@ -493,8 +524,7 @@ exec:
 		int flags = vm_pop(M);
 		int64_t word = vm_pop(M);
 
-		if (M->o.p < M->o.pe)
-			*M->o.p++ = '?';
+		vm_putc(M, '?');
 
 //		fprintf(stdout, "(spec:%d width:%d prec:%d flags:%d words:0x%.8x)", spec, width, prec, flags, (int)word);
 
@@ -515,13 +545,15 @@ exec:
 
 		break;
 	}
+	case OP_RESET:
+		M->i.p = M->i.base;
+
+		break;
 	} /* switch() */
 
 	++M->pc;
 
 	goto exec;
-
-	return 0;
 } /* vm_exec() */
 
 
@@ -622,7 +654,7 @@ static void emit_link(struct vm_state *M, int from, int to) {
 } /* emit_link() */
 
 
-static void emit_unit(struct vm_state *M, int loop, int limit, const unsigned char **fmt) {
+static void emit_unit(struct vm_state *M, int loop, int limit, size_t *blocksize, const unsigned char **fmt) {
 	_Bool quoted = 0, escaped = 0;
 	int consumes = 0;
 	int L1, L2, from, ch;
@@ -760,7 +792,7 @@ copyout:
 	}
 
 epilog:
-	if (consumes < limit) {
+	if (loop > 0 && consumes < limit) {
 		emit_int(M, limit - consumes);
 		emit_op(M, OP_READ);
 		emit_op(M, OP_POP);
@@ -778,8 +810,7 @@ epilog:
 	if (loop > 1)
 		emit_op(M, OP_TRIM);
 
-	if ((size_t)(consumes * loop) > M->blocksize)
-		M->blocksize += (size_t)(consumes * loop);
+	*blocksize += (size_t)(consumes * loop);
 
 	return /* void */;
 } /* emit_unit() */
@@ -792,13 +823,18 @@ struct hexdump {
 }; /* struct hexdump */
 
 
+static void hxd_init(struct hexdump *X) {
+	memset(X, 0, sizeof *X);
+} /* hxd_init() */
+
+
 struct hexdump *hxd_open(int *error) {
 	struct hexdump *X;
 
 	if (!(X = malloc(sizeof *X)))
 		goto syerr;
 
-	memset(X, 0, sizeof *X);
+	hxd_init(X);
 
 	return X;	
 syerr:
@@ -810,37 +846,158 @@ syerr:
 } /* hxd_open() */
 
 
+static void hxd_destroy(struct hexdump *X) {
+	free(X->vm.i.base);
+	free(X->vm.o.base);
+} /* hxd_destroy() */
+
+
 void hxd_close(struct hexdump *X) {
 	if (!X)
 		return /* void */;
 
-	free(X->vm.i.base);
-	free(X->vm.o.base);
+	hxd_destroy(X);
 	free(X);
 } /* hxd_close() */
 
 
+void hxd_reset(struct hexdump *X) {
+	X->vm.i.p = X->vm.i.base;
+	X->vm.o.p = X->vm.o.base;
+	X->vm.pc = 0;
+} /* hxd_reset() */
+
+
 int hxd_compile(struct hexdump *X, const const char *_fmt, int flags) {
 	const unsigned char *fmt = (const unsigned char *)_fmt;
-	int loop, bytes;
+	unsigned char *tmp;
+	int error;
+
+	hxd_reset(X);
+
+	if ((error = vm_enter(&X->vm)))
+		goto error;
 
 	while (skipws(&fmt, 1)) {
-		loop = getint(&fmt);
+		int lc, loop, limit;
+		size_t blocksize = 0;
 
-		if ('/' == skipws(&fmt, 0)) {
-			fmt++;
-			bytes = getint(&fmt);
-		} else {
-			bytes = -1;
-		}
+		emit_op(&X->vm, OP_RESET);
 
-		skipws(&fmt, 0);
+		do {
+			loop = getint(&fmt);
 
-		emit_unit(&X->vm, loop, bytes, &fmt);
+			if ('/' == skipws(&fmt, 0)) {
+				fmt++;
+				limit = getint(&fmt);
+			} else {
+				limit = -1;
+			}
+
+			skipws(&fmt, 0);
+			emit_unit(&X->vm, loop, limit, &blocksize, &fmt);
+		} while ((lc = skipws(&fmt, 0)) && lc != '\n');
+
+		if (blocksize > X->vm.blocksize)
+			X->vm.blocksize = blocksize;
+	}
+
+	if (!(tmp = realloc(X->vm.i.base, X->vm.blocksize)))
+		goto syerr;
+
+	X->vm.i.base = tmp;
+	X->vm.i.p = tmp;
+	X->vm.i.pe = &tmp[X->vm.blocksize];
+
+	return 0;
+syerr:
+	error = errno;
+error:
+	hxd_reset(X);
+	memset(X->vm.code, 0, sizeof X->vm.code);
+
+	return error;
+} /* hxd_compile() */
+
+
+const char *hxd_help(struct hexdump *X) {
+	return "helps";
+} /* hxd_help() */
+
+
+int hxd_write(struct hexdump *X, const void *src, size_t len) {
+	const unsigned char *p, *pe;
+	size_t n;
+	int error;
+
+	if ((error = vm_enter(&X->vm)))
+		goto error;
+
+	if (X->vm.i.pe == X->vm.i.base)
+		vm_throw(&X->vm, HXD_EOOPS);
+
+	p = src;
+	pe = p + len;
+
+	while (p < pe) {
+		n = MIN(pe - p, X->vm.i.pe - X->vm.i.p);
+		memcpy(X->vm.i.p, p, n);
+		X->vm.i.p += n;
+		p += n;
+
+		if (X->vm.i.p < X->vm.i.pe)
+			break;
+
+		X->vm.i.p = 0;
+		vm_exec(&X->vm);
+		X->vm.i.p = 0;
 	}
 
 	return 0;
-} /* hxd_compile() */
+error:
+	return error;
+} /* hxd_write() */
+
+
+int hxd_flush(struct hexdump *X) {
+	int error;
+
+	if ((error = vm_enter(&X->vm)))
+		goto error;
+
+	if (X->vm.i.p > X->vm.i.base) {
+		X->vm.i.p = 0;
+		vm_exec(&X->vm);
+		X->vm.i.p = 0;
+	}
+
+	return 0;
+error:
+	return error;
+} /* hxd_write() */
+
+
+size_t hxd_read(struct hexdump *X, void *dst, size_t lim) {
+	unsigned char *p, *pe, *op;
+	size_t n;
+
+	p = dst;
+	pe = p + lim;
+	op = X->vm.o.base;
+
+	while (p < pe && op < X->vm.o.p) {
+		n = MIN(pe - p, X->vm.o.p - op);
+		memcpy(p, op, n);
+		p += n;
+		op += n;
+	}
+
+	n = X->vm.o.p - op;
+	memmove(X->vm.o.base, op, n);
+	X->vm.o.p = &X->vm.o.base[n];
+
+	return p - (unsigned char *)dst;
+} /* hxd_read() */
 
 
 const char *hxd_strerror(int error) {
@@ -865,40 +1022,35 @@ const char *hxd_strerror(int error) {
 
 
 
-int main(int argc __attribute__((unused)), char **argv) {
-	unsigned char input[256], output[256];
-	struct vm_state M;
-	size_t n;
+int main(int argc, char **argv) {
+	struct hexdump *X;
+	char buf[256], *fmt;
+	size_t len;
 	int error;
 
-	memset(&M, 0, sizeof M);
+	if (!(X = hxd_open(&error)))
+		OOPS("open: %s", hxd_strerror(error));
 
-	error = _setjmp(M.trap);
+	fmt = (argc > 1)? argv[1] : "16/1 %.2x";
 
-	if (error) {
-		fprintf(stderr, "oops: 0x%.4x\n", error);
-		return 1;
+	if ((error = hxd_compile(X, fmt, 0)))
+		OOPS("%s: %s", fmt, hxd_strerror(error));
+
+	vm_dump(&X->vm, stderr);
+
+	while ((len = fread(buf, 1, sizeof buf, stdin))) {
+		if ((error = hxd_write(X, buf, len)))
+			OOPS("write: %s", hxd_strerror(error));
+
+		while ((len = hxd_read(X, buf, sizeof buf)))
+			fwrite(buf, 1, len, stdout);
 	}
 
-	parse(&M, (void *)argv[1]);
+	if ((error = hxd_flush(X)))
+		OOPS("write: %s", hxd_strerror(error));
 
-	vm_dump(&M, stdout);
-
-	M.i.base = input;
-	M.o.base = output;
-	M.o.pe =   &output[sizeof output];
-
-	while ((n = fread(input, 1, M.blocksize, stdin))) {
-		M.pc = 0;
-		M.i.p = M.i.base;
-		M.i.pe = &M.i.base[n];
-		M.o.p = M.o.base;
-
-		vm_exec(&M);
-
-		fwrite(M.o.base, 1, M.o.p - M.o.base, stdout);
-		fputc('\n', stdout);
-	}
+	while ((len = hxd_read(X, buf, sizeof buf)))
+		fwrite(buf, 1, len, stdout);
 
 	return 0;
 } /* main() */
