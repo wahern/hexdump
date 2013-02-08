@@ -633,7 +633,6 @@ static void vm_conv(struct vm_state *M, int flags, int width, int prec, int fc, 
 	*fp++ = '*';
 	*fp++ = fc;
 	*fp = '\0';
-//SAY("fmt:%s prec:%d s:%s", fmt, prec, s);
 
 	switch (fc) {
 	case 's':
@@ -661,58 +660,79 @@ static void vm_conv(struct vm_state *M, int flags, int width, int prec, int fc, 
 } /* vm_conv() */
 
 
+#define VM_FASTER defined(__GNUC__)
+
+#if VM_FASTER
+#define BEGIN goto *jump[M->code[M->pc]]
+#define END (void)0
+#define CASE(op) XPASTE(OP_, op)
+#define NEXT goto *jump[M->code[++M->pc]]
+#else
+#define BEGIN exec: switch (M->code[M->pc]) { (void)0
+#define END } (void)0
+#define CASE(op) case XPASTE(OP_, op)
+#define NEXT ++M->pc; goto exec
+#endif
+
 static void vm_exec(struct vm_state *M) {
-	enum vm_opcode op;
+#if VM_FASTER
+#define L(L) (&&XPASTE(OP_, L))
+	static const void *const jump[] = {
+		L(HALT), L(NOOP), L(TRAP), L(PC), L(TRUE), L(FALSE),
+		L(ZERO), L(ONE), L(TWO), L(I8), L(I16), L(I32),
+		L(NEG), L(SUB), L(ADD), L(NOT),
+		L(POP), L(DUP), L(SWAP), L(READ), L(COUNT), L(PUTC), L(CONV),
+		L(CHOP), L(PAD), L(JMP), L(RESET),
+	};
+#endif
 	int64_t v;
 
-exec:
-	op = M->code[M->pc];
+	BEGIN;
 
-	switch (op) {
-	case OP_HALT:
+	CASE(HALT):
 		return /* void */;
-	case OP_NOOP:
-		break;
-	case OP_TRAP:
+	CASE(NOOP):
+		NEXT;
+	CASE(TRAP):
 		vm_throw(M, HXD_EOOPS);
 
-		break;
-	case OP_PC:
+		NEXT;
+	CASE(PC):
 		vm_push(M, M->pc);
 
-		break;
-	case OP_TRUE:
+		NEXT;
+	CASE(TRUE):
 		vm_push(M, 1);
 
-		break;
-	case OP_FALSE:
+		NEXT;
+	CASE(FALSE):
 		vm_push(M, 0);
 
-		break;
-	case OP_ZERO:
+		NEXT;
+	CASE(ZERO):
 		vm_push(M, 0);
 
-		break;
-	case OP_ONE:
+		NEXT;
+	CASE(ONE):
 		vm_push(M, 1);
 
-		break;
-	case OP_TWO:
+		NEXT;
+	CASE(TWO):
 		vm_push(M, 2);
 
-		break;
-	case OP_I8:
+		NEXT;
+	CASE(I8):
 		vm_push(M, M->code[++M->pc]);
 
-		break;
-	case OP_I16:
+		NEXT;
+	CASE(I16):
 		v = M->code[++M->pc] << 8;
 		v |= M->code[++M->pc];
 
 		vm_push(M, v);
 
-		break;
-	case OP_I32:
+		NEXT;
+	CASE(I32):
 		v = M->code[++M->pc] << 24;
 		v = M->code[++M->pc] << 16;
 		v = M->code[++M->pc] << 8;
@@ -720,53 +740,53 @@ exec:
 
 		vm_push(M, v);
 
-		break;
-	case OP_NEG:
+		NEXT;
+	CASE(NEG):
 		vm_push(M, -vm_pop(M));
 
-		break;
-	case OP_SUB: {
+		NEXT;
+	CASE(SUB): {
 		int64_t b = vm_pop(M);
 		int64_t a = vm_pop(M);
 
 		vm_push(M, a - b);
 
-		break;
+		NEXT;
 	}
-	case OP_ADD: {
+	CASE(ADD): {
 		int64_t b = vm_pop(M);
 		int64_t a = vm_pop(M);
 
 		vm_push(M, a + b);
 
-		break;
+		NEXT;
 	}
-	case OP_NOT:
+	CASE(NOT):
 		vm_push(M, !vm_pop(M));
 
-		break;
-	case OP_POP:
+		NEXT;
+	CASE(POP):
 		vm_pop(M);
 
-		break;
-	case OP_DUP: {
+		NEXT;
+	CASE(DUP): {
 		int64_t v = vm_pop(M);
 
 		vm_push(M, v);
 		vm_push(M, v);
 
-		break;
+		NEXT;
 	}
-	case OP_SWAP: {
+	CASE(SWAP): {
 		int64_t x = vm_pop(M);
 		int64_t y = vm_pop(M);
 
 		vm_push(M, x);
 		vm_push(M, y);
 
-		break;
+		NEXT;
 	}
-	case OP_READ: {
+	CASE(READ): {
 		int64_t i, n, v;
 
 		n = vm_pop(M);
@@ -779,18 +799,18 @@ exec:
 
 		vm_push(M, v);
 
-		break;
+		NEXT;
 	}
-	case OP_COUNT:
+	CASE(COUNT):
 		vm_push(M, M->i.pe - M->i.p);
 
-		break;
-	case OP_PUTC: {
+		NEXT;
+	CASE(PUTC): {
 		vm_putc(M, M->code[++M->pc]);
 
-		break;
+		NEXT;
 	}
-	case OP_CONV: {
+	CASE(CONV): {
 		int fc = vm_pop(M);
 		int prec = vm_pop(M);
 		int width = vm_pop(M);
@@ -799,11 +819,9 @@ exec:
 
 		vm_conv(M, flags, width, prec, fc, word);
 
-//		fprintf(stdout, "(spec:%d width:%d prec:%d flags:%d words:0x%.8x)", spec, width, prec, flags, (int)word);
-
-		break;
+		NEXT;
 	}
-	case OP_CHOP:
+	CASE(CHOP):
 		v = vm_pop(M);
 
 		while (v > 0 && M->o.p > M->o.base) {
@@ -811,33 +829,33 @@ exec:
 			--v;
 		}
 
-		break;
-	case OP_PAD:
+		NEXT;
+	CASE(PAD):
 		v = vm_pop(M);
 
 		while (v-- > 0)
 			vm_putc(M, ' ');
 
-		break;
-	case OP_JMP: {
+		NEXT;
+	CASE(JMP): {
 		int64_t pc = vm_pop(M);
 
 		if (vm_pop(M)) {
-			M->pc = pc;
+			M->pc = pc % countof(M->code);
+#if VM_FASTER
+			goto *jump[M->code[pc]];
+#else
 			goto exec;
+#endif
 		}
 
-		break;
+		NEXT;
 	}
-	case OP_RESET:
+	CASE(RESET):
 		M->i.p = M->i.base;
 
-		break;
-	} /* switch() */
-
-	++M->pc;
-
-	goto exec;
+		NEXT;
+	END;
 } /* vm_exec() */
 
 
