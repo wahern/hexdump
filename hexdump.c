@@ -37,6 +37,118 @@
 #define NOTUSED __attribute__((unused))
 #endif
 
+#ifndef NORETURN
+#define NORETURN __attribute__((noreturn))
+#endif
+
+#define NARG_(a, b, c, d, e, f, g, h, N,...) N
+#define NARG(...) NARG_(__VA_ARGS__, 8, 7, 6, 5, 4, 3, 2, 1, 0)
+
+#define PASTE(x, y) x##y
+#define XPASTE(x, y) PASTE(x, y)
+
+#define STRINGIFY_(s) #s
+#define STRINGIFY(s) STRINGIFY_(s)
+
+
+static unsigned char toprint(unsigned char chr) {
+	return (chr > 0x1f && chr < 0x7f)? chr : '.';
+} /* toprint() */
+
+
+static const char *tooctal(char buf[3], unsigned char chr) {
+	if (chr > 0x1f && chr < 0x7f) {
+		buf[0] = chr;
+		buf[1] = '\0';
+	} else {
+		switch (chr) {
+		case '\0':
+			buf[0] = '\\';
+			buf[1] = '0';
+			buf[2] = '\0';
+
+			break;
+		case '\a':
+			buf[0] = '\\';
+			buf[1] = 'a';
+			buf[2] = '\0';
+
+			break;
+		case '\b':
+			buf[0] = '\\';
+			buf[1] = 'b';
+			buf[2] = '\0';
+
+			break;
+		case '\f':
+			buf[0] = '\\';
+			buf[1] = 'f';
+			buf[2] = '\0';
+
+			break;
+		case '\n':
+			buf[0] = '\\';
+			buf[1] = 'n';
+			buf[2] = '\0';
+
+			break;
+		case '\r':
+			buf[0] = '\\';
+			buf[1] = 'r';
+			buf[2] = '\0';
+
+			break;
+		case '\t':
+			buf[0] = '\\';
+			buf[1] = 't';
+			buf[2] = '\0';
+
+			break;
+		case '\v':
+			buf[0] = '\\';
+			buf[1] = 'v';
+			buf[2] = '\0';
+
+			break;
+		default:
+			buf[0] = "01234567"[0x7 & (chr >> 6)];
+			buf[1] = "01234567"[0x7 & (chr >> 3)];
+			buf[2] = "01234567"[0x7 & (chr >> 0)];
+
+			break;
+		}
+	}
+
+	return buf;
+} /* tooctal() */
+
+
+static const char *toshort(char buf[3], unsigned char chr) {
+	static const char map[][3] = {
+		[0x00] = "nul", [0x01] = "soh", [0x02] = "stx", [0x03] = "etx",
+		[0x04] = "eot", [0x05] = "enq", [0x06] = "ack", [0x07] = "bel",
+		[0x08] = "bs",  [0x09] = "ht",  [0x0a] = "lf",  [0x0b] = "vt",
+		[0x0c] = "ff",  [0x0d] = "cr",  [0x0e] = "so",  [0x0f] = "si",
+		[0x10] = "dle", [0x11] = "dc1", [0x12] = "dc2", [0x13] = "dc3",
+		[0x14] = "dc4", [0x15] = "nak", [0x16] = "syn", [0x17] = "etb",
+		[0x18] = "can", [0x19] = "em",  [0x1a] = "sub", [0x1b] = "esc",
+		[0x1c] = "fs",  [0x1d] = "gs",  [0x1e] = "rs",  [0x1f] = "us",
+		[0x7f] = "del",
+	};
+
+	if (chr <= 0x1f || chr == 0x7f) {
+		memcpy(buf, map[chr], 3);
+	} else if (chr < 0x7f) {
+		buf[0] = chr;
+		buf[1] = '\0';
+	} else {
+		buf[0] = "0123456789abcdef"[0x0f & (chr >> 4)];
+		buf[1] = "0123456789abcdef"[0x0f & chr];
+		buf[2] = '\0';
+	}
+
+	return buf;
+} /* toshort() */
 
 static inline unsigned char skipws(const unsigned char **fmt, _Bool nl) {
 	static const unsigned char space_nl[] = {
@@ -81,6 +193,12 @@ static inline int getint(const unsigned char **fmt) {
 #define F_MINUS 4
 #define F_SPACE 8
 #define F_PLUS 16
+
+#define CHR(x) (STRINGIFY(x)[0])
+
+#define FC2(x, y) ((0xff & (y)) << 8) | (0xff & (x))
+#define FC1(x) (0xff & (x))
+#define FC(...) XPASTE(FC, NARG(__VA_ARGS__))(__VA_ARGS__)
 
 static inline int getcnv(int *flags, int *width, int *prec, int *bytes, const unsigned char **fmt) {
 	int ch;
@@ -133,13 +251,13 @@ width:
 		case 'a':
 			switch (*++*fmt) {
 			case 'd':
-				ch = ('_' | ('d' << 8));
+				ch = FC('_', 'd');
 				break;
 			case 'o':
-				ch = ('_' | ('o' << 8));
+				ch = FC('_', 'o');
 				break;
 			case 'x':
-				ch = ('_' | ('x' << 8));
+				ch = FC('_', 'x');
 				break;
 			default:
 				return 0;
@@ -149,29 +267,33 @@ width:
 		case 'A':
 			switch (*++*fmt) {
 			case 'd':
-				ch = ('_' | ('D' << 8));
+				ch = FC('_', 'D');
 				break;
 			case 'o':
-				ch = ('_' | ('O' << 8));
+				ch = FC('_', 'O');
 				break;
 			case 'x':
-				ch = ('_' | ('X' << 8));
+				ch = FC('_', 'X');
 				break;
 			default:
 				return 0;
 			}
 			*bytes = 0;
+
+			/* XXX: Not supported yet. */
+			return 0;
+
 			break;
 		case 'c':
-			ch = ('_' | ('c' << 8));
+			ch = FC('_', 'c');
 			*bytes = 1;
 			break;
 		case 'p':
-			ch = ('_' | ('p' << 8));
+			ch = FC('_', 'p');
 			*bytes = 1;
 			break;
 		case 'u':
-			ch = ('_' | ('u' << 8));
+			ch = FC('_', 'u');
 			*bytes = 1;
 			break;
 		default:
@@ -277,82 +399,87 @@ struct vm_state {
 }; /* struct vm_state */
 
 
+NOTUSED static void op_dump(struct vm_state *M, int *pc, FILE *fp) {
+	enum vm_opcode op = M->code[*pc];
+	unsigned n;
+
+	fprintf(fp, "%d: ", *pc);
+
+	switch (op) {
+	case OP_I8:
+		fprintf(fp, "%s %u\n", vm_strop(op), (unsigned)M->code[++*pc]);
+
+		break;
+	case OP_I16:
+		n = M->code[++*pc] << 8;
+		n |= M->code[++*pc];
+
+		fprintf(fp, "%s %u\n", vm_strop(op), n);
+
+		break;
+	case OP_I32:
+		n = M->code[++*pc] << 24;
+		n |= M->code[++*pc] << 16;
+		n |= M->code[++*pc] << 8;
+		n |= M->code[++*pc] << 0;
+
+		fprintf(fp, "%s %u\n", vm_strop(op), n);
+
+		break;
+	case OP_PUTC: {
+		const char *txt = vm_strop(op);
+		int chr = M->code[++*pc];
+
+		switch (chr) {
+		case '\n':
+			fprintf(fp, "%s \\n (0x0a)\n", txt);
+
+			break;
+		case '\r':
+			fprintf(fp, "%s \\r (0x0d)\n", txt);
+
+			break;
+		case '\t':
+			fprintf(fp, "%s \\t (0x09)\n", txt);
+
+			break;
+		default:
+			if (chr > 31 && chr < 127)
+				fprintf(fp, "%s %c (0x%.2x)\n", txt, chr, chr);
+			else
+				fprintf(fp, "%s . (0x%.2x)\n", txt, chr);
+
+			break;
+		} /* switch() */
+
+		break;
+	}
+	default:
+		fprintf(fp, "%s\n", vm_strop(op));
+
+		break;
+	} /* switch() */
+
+	++*pc;
+} /* op_dump() */
+
+
 NOTUSED static void vm_dump(struct vm_state *M, FILE *fp) {
+	enum vm_opcode op;
+	int pc = 0;
+
 	fprintf(fp, "-- blocksize: %zu\n", M->blocksize);
 
-	for (unsigned pc = 0; pc < countof(M->code); pc++) {
-		enum vm_opcode op = M->code[pc];
-		unsigned n;
-
-		fprintf(fp, "%d: ", pc);
-
-		switch (op) {
-		case OP_I8:
-			fprintf(fp, "%s %u\n", vm_strop(op), (unsigned)M->code[++pc]);
-
-			break;
-		case OP_I16:
-			n = M->code[++pc] << 8;
-			n |= M->code[++pc];
-
-			fprintf(fp, "%s %u\n", vm_strop(op), n);
-
-			break;
-		case OP_I32:
-			n = M->code[++pc] << 24;
-			n |= M->code[++pc] << 16;
-			n |= M->code[++pc] << 8;
-			n |= M->code[++pc] << 0;
-
-			fprintf(fp, "%s %u\n", vm_strop(op), n);
-
-			break;
-		case OP_PUTC: {
-			const char *txt = vm_strop(op);
-			int chr = M->code[++pc];
-
-			switch (chr) {
-			case '\n':
-				fprintf(fp, "%s \\n (0x0a)\n", txt);
-
-				break;
-			case '\r':
-				fprintf(fp, "%s \\r (0x0d)\n", txt);
-
-				break;
-			case '\t':
-				fprintf(fp, "%s \\t (0x09)\n", txt);
-
-				break;
-			default:
-				if (chr > 31 && chr < 127)
-					fprintf(fp, "%s %c (0x%.2x)\n", txt, chr, chr);
-				else
-					fprintf(fp, "%s . (0x%.2x)\n", txt, chr);
-
-				break;
-			}
-
-			break;
-		}
-		case OP_HALT:
-			fprintf(fp, "%s\n", vm_strop(op));
-
-			goto done;
-		default:
-			fprintf(fp, "%s\n", vm_strop(op));
-
-			break;
-		}
-	}
-done:
-	return /* void */;
+	do {
+		op = M->code[pc];
+		op_dump(M, &pc, fp);
+	} while (op != OP_HALT);
 } /* vm_dump() */
 
 
 #define vm_enter(M) _setjmp((M)->trap)
 
-static void vm_throw(struct vm_state *M, int error) {
+NORETURN static void vm_throw(struct vm_state *M, int error) {
 	_longjmp(M->trap, error);
 } /* vm_throw() */
 
@@ -398,9 +525,70 @@ NOTUSED static int64_t vm_peek(struct vm_state *M, int i) {
 
 
 static void vm_conv(struct vm_state *M, int flags, int width, int prec, int fc, int64_t word) {
-	char fmt[32], *fp, buf[128];
+	char fmt[32], *fp, buf[256], label[3];
 	const char *s;
 	int i, len;
+
+	switch (fc) {
+	case FC('_', 'c'):
+		s = tooctal(label, word);
+		prec = (prec > 0)? MIN(prec, 3) : 3;
+		fc = 's';
+
+		break;
+	case FC('_', 'p'):
+		word = toprint(word);
+		fc = 'c';
+
+		break;
+	case FC('_', 'u'):
+		s = toshort(label, word);
+		prec = (prec > 0)? MIN(prec, 3) : 3;
+		fc = 's';
+
+		break;
+	case FC('_', 'd'):
+		word = M->i.address + (M->i.p - M->i.base);
+		fc = 'd';
+
+		break;
+	case FC('_', 'o'):
+		word = M->i.address + (M->i.p - M->i.base);
+		fc = 'o';
+
+		break;
+	case FC('_', 'x'):
+		word = M->i.address + (M->i.p - M->i.base);
+		fc = 'x';
+
+		break;
+	case FC('_', 'D'):
+		/* FALL THROUGH */
+	case FC('_', 'O'):
+		/* FALL THROUGH */
+	case FC('_', 'X'):
+		fc = 'x';
+
+		vm_throw(M, HXD_ENOTSUPP);
+
+		break;
+	case FC('s'):
+		s = (const char *)M->i.p;
+
+		if (prec <= 0 || prec > M->i.pe - M->i.p)
+			prec = M->i.pe - M->i.p;
+
+		break;
+	case FC('c'):
+		/* FALL THROUGH */
+	case FC('d'): case FC('i'): case FC('o'):
+	case FC('u'): case FC('X'): case FC('x'):
+		break;
+	default:
+		vm_throw(M, HXD_ENOTSUPP);
+
+		break;
+	} /* switch() */
 
 	fp = fmt;
 
@@ -418,60 +606,24 @@ static void vm_conv(struct vm_state *M, int flags, int width, int prec, int fc, 
 	*fp++ = '*';
 	*fp++ = '.';
 	*fp++ = '*';
-
-	if ((0xff & fc) == '_') {
-		switch (0xff & (fc >> 8)) {
-		case 'c':
-			s = "---";
-			prec = 3;
-			fc = 's';
-
-			break;
-		case 'p':
-			if (word <= 31 || word >= 127)
-				word = '.';
-
-			fc = 'c';
-
-			break;
-		case 'u':
-			s = "---";
-			prec = 3;
-			fc = 's';
-
-			break;
-		case 'd':
-			fc = 'd';
-			word = M->i.address + (M->i.p - M->i.base);
-		case 'o':
-			fc = 'o';
-			word = M->i.address + (M->i.p - M->i.base);
-		case 'x':
-			fc = 'x';
-			word = M->i.address + (M->i.p - M->i.base);
-			break;
-		case 'D':
-		case 'O':
-		case 'X':
-		default:
-			vm_putc(M, '?');
-			return;
-		}
-	} else if (fc == 's') {
-		s = (const char *)M->i.p;
-
-		if (prec <= 0 || prec > M->i.pe - M->i.p)
-			prec = M->i.pe - M->i.p;
-	}
-
 	*fp++ = fc;
 	*fp = '\0';
 //SAY("fmt:%s prec:%d s:%s", fmt, prec, s);
 
-	if (fc == 's')
+	switch (fc) {
+	case 's':
 		len = snprintf(buf, sizeof buf, fmt, (int)MAX(width, 0), (int)MAX(prec, 0), s);
-	else
+
+		break;
+	case 'u':
+		len = snprintf(buf, sizeof buf, fmt, (int)MAX(width, 0), (int)MAX(prec, 0), (unsigned)word);
+
+		break;
+	default:
 		len = snprintf(buf, sizeof buf, fmt, (int)MAX(width, 0), (int)MAX(prec, 0), (int)word);
+
+		break;
+	}
 
 	if (-1 == len)
 		vm_throw(M, errno);
@@ -654,7 +806,7 @@ exec:
 
 
 static void emit_op(struct vm_state *M, unsigned char code) {
-	if (M->pc >= (int)sizeof M->code)
+	if (M->pc >= (int)sizeof M->code - 1)
 		vm_throw(M, ENOMEM);
 	M->code[M->pc++] = code;
 } /* emit_op() */
@@ -821,7 +973,7 @@ static void emit_unit(struct vm_state *M, int loop, int limit, size_t *blocksize
 
 			break;
 		}
-		case ' ': case '\t':
+		case ' ': case '\t': case '\n':
 			if (quoted || escaped)
 				goto copyout;
 
@@ -1002,6 +1154,9 @@ int hxd_compile(struct hexdump *X, const const char *_fmt, int flags) {
 			X->vm.blocksize = blocksize;
 	}
 
+	emit_op(&X->vm, OP_HALT);
+	memset(&X->vm.code[X->vm.pc], OP_TRAP, sizeof X->vm.code - X->vm.pc);
+
 	if (!(tmp = realloc(X->vm.i.base, X->vm.blocksize)))
 		goto syerr;
 
@@ -1111,6 +1266,7 @@ const char *hxd_strerror(int error) {
 	static const char *txt[] = {
 		[HXD_EFORMAT - HXD_EBASE] = "invalid format",
 		[HXD_EDRAINED - HXD_EBASE] = "unit drains buffer",
+		[HXD_ENOTSUPP - HXD_EBASE] = "unsupported conversion sequence",
 		[HXD_EOOPS - HXD_EBASE] = "machine traps",
 	};
 
@@ -1128,38 +1284,129 @@ const char *hxd_strerror(int error) {
 } /* hxd_strerror() */
 
 
+#if HEXDUMP_MAIN
 
-int main(int argc, char **argv) {
-	struct hexdump *X;
-	char buf[256], *fmt;
+#include <stdio.h>  /* FILE stdout stderr stdin fprintf(3) */
+
+#include <string.h> /* strcmp(3) */
+
+#include <unistd.h> /* getopt(3) */
+
+#include <err.h>
+
+
+static void run(struct hexdump *X, FILE *fp, _Bool flush) {
+	char buf[256];
 	size_t len;
 	int error;
 
-	if (!(X = hxd_open(&error)))
-		OOPS("open: %s", hxd_strerror(error));
-
-	fmt = (argc > 1)? argv[1] : "16/1 %.2x";
-
-	if ((error = hxd_compile(X, fmt, 0)))
-		OOPS("%s: %s", fmt, hxd_strerror(error));
-
-	vm_dump(&X->vm, stderr);
-
-	while ((len = fread(buf, 1, sizeof buf, stdin))) {
+	while ((len = fread(buf, 1, sizeof buf, fp))) {
 		if ((error = hxd_write(X, buf, len)))
-			OOPS("write: %s", hxd_strerror(error));
+			errx(EXIT_FAILURE, "%s", hxd_strerror(error));
 
 		while ((len = hxd_read(X, buf, sizeof buf)))
 			fwrite(buf, 1, len, stdout);
 	}
 
-	if ((error = hxd_flush(X)))
-		OOPS("write: %s", hxd_strerror(error));
+	if (flush) {
+		if ((error = hxd_flush(X)))
+			errx(EXIT_FAILURE, "%s", hxd_strerror(error));
 
-	while ((len = hxd_read(X, buf, sizeof buf)))
-		fwrite(buf, 1, len, stdout);
+		while ((len = hxd_read(X, buf, sizeof buf)))
+			fwrite(buf, 1, len, stdout);
+	}
+} /* run() */
 
+
+int main(int argc, char **argv) {
+	extern char *optarg;
+	extern int optind;
+	int opt;
+	_Bool dump = 0;
+	struct hexdump *X;
+	char buf[256], *fmt = "16/1 %.2x", fmtbuf[512];
+	size_t len;
+	int error;
+
+	while (-1 != (opt = getopt(argc, argv, "e:f:Dh"))) {
+		switch (opt) {
+		case 'e':
+			fmt = optarg;
+
+			break;
+		case 'f': {
+			FILE *fp = (!strcmp(optarg, "-"))? stdin : fopen(optarg, "r");
+
+			if (!fp)
+				err(EXIT_FAILURE, "%s", optarg);
+
+			len = fread(fmtbuf, 1, sizeof fmtbuf - 1, fp);
+			fmtbuf[len] = '\0';
+
+			if (fp != stdin)
+				fclose(fp);
+
+			fmt = fmtbuf;
+
+			break;
+		}
+		case 'D':
+			dump = 1;
+
+			break;
+		default: {
+			FILE *fp = (opt == 'h')? stdout : stderr;
+
+			fprintf(fp,
+				"hexdump [-e:f:Dh] [file ...]\n" \
+				"  -e FMT   hexdump string format\n" \
+				"  -f PATH  path to hexdump format file\n" \
+				"  -D       dump the compiled machine\n" \
+				"  -h       print usage help\n" \
+				"\n" \
+				"Report bugs to <william@25thandClement.com>\n"
+			);
+
+			return (opt == 'h')? 0 : EXIT_FAILURE;
+		}
+		} /* switch() */
+	}
+
+	argc -= optind;
+	argv += optind;
+
+	if (!(X = hxd_open(&error)))
+		OOPS("open: %s", hxd_strerror(error));
+
+	if ((error = hxd_compile(X, fmt, 0)))
+		OOPS("%s: %s", fmt, hxd_strerror(error));
+
+	if (dump) {
+		vm_dump(&X->vm, stdout);
+
+		goto exit;
+	}
+
+	if (!optind) {
+		run(X, stdin, 1);
+	} else {
+		int i;
+
+		for (i = 0; i < argc; i++) {
+			FILE *fp;
+
+			if (!(fp = fopen(argv[i], "r")))
+				err(EXIT_FAILURE, "%s", argv[i]);
+
+			run(X, fp, !argv[i + 1]);
+
+			fclose(fp);
+		}
+	}
+exit:
 	hxd_close(X);
 
 	return 0;
 } /* main() */
+
+#endif /* HEXDUMP_MAIN */
