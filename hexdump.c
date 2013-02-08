@@ -175,21 +175,19 @@ static const char *toshort(char buf[3], unsigned char chr) {
 	return buf;
 } /* toshort() */
 
-static inline unsigned char skipws(const unsigned char **fmt, _Bool nl) {
-	static const unsigned char space_nl[] = {
+
+static inline _Bool hxd_isspace(unsigned char chr, _Bool nlok) {
+	static const unsigned char space[] = {
 		['\t'] = 1, ['\n'] = 1, ['\v'] = 1, ['\r'] = 1, ['\f'] = 1, [' '] = 1,
 	};
-	static const unsigned char space_sp[] = {
-		['\t'] = 1, ['\v'] = 1, ['\r'] = 1, ['\f'] = 1, [' '] = 1,
-	};
 
-	if (nl) {
-		while (**fmt < sizeof space_nl && space_nl[**fmt])
-			++*fmt;
-	} else {
-		while (**fmt < sizeof space_sp && space_sp[**fmt])
-			++*fmt;
-	}
+	return (chr < sizeof space && space[chr] && (nlok || chr != '\n'));
+} /* hxd_isspace() */
+
+
+static inline unsigned char skipws(const unsigned char **fmt, _Bool nlok) {
+	while (hxd_isspace(**fmt, nlok))
+		++*fmt;
 
 	return **fmt;
 } /* skipws() */
@@ -358,7 +356,8 @@ enum vm_opcode {
 	OP_COUNT, /* 0/1 | count of bytes in input buffer */
 	OP_PUTC,  /* 0/0 | copy char directly to output buffer */
 	OP_CONV,  /* 5/0 | write conversion to output buffer */
-	OP_TRIM,  /* 0/0 | trim trailing white space from output buffer */
+	OP_CHOP,  /* 1/0 | chop trailing characters from output buffer */
+	OP_PAD,   /* 1/0 | emit padding space to output buffer */
 	OP_JMP,   /* 2/0 | conditional jump to address */
 	OP_RESET, /* 0/0 | reset input buffer position */
 }; /* enum vm_opcode */
@@ -389,7 +388,8 @@ static const char *vm_strop(enum vm_opcode op) {
 		[OP_COUNT] = "COUNT",
 		[OP_PUTC]  = "PUTC",
 		[OP_CONV]  = "CONV",
-		[OP_TRIM]  = "TRIM",
+		[OP_CHOP]  = "CHOP",
+		[OP_PAD]   = "PAD",
 		[OP_JMP]   = "JMP",
 		[OP_RESET] = "RESET",
 	};
@@ -551,7 +551,7 @@ NOTUSED static int64_t vm_peek(struct vm_state *M, int i) {
 
 static void vm_conv(struct vm_state *M, int flags, int width, int prec, int fc, int64_t word) {
 	char fmt[32], *fp, buf[256], label[3];
-	const char *s;
+	const char *s = NULL;
 	int i, len;
 
 	switch (fc) {
@@ -803,9 +803,20 @@ exec:
 
 		break;
 	}
-	case OP_TRIM:
-		while (M->o.p > M->o.base && (M->o.p[-1] == ' ' || M->o.p[-1] == '\t'))
+	case OP_CHOP:
+		v = vm_pop(M);
+
+		while (v > 0 && M->o.p > M->o.base) {
 			--M->o.p;
+			--v;
+		}
+
+		break;
+	case OP_PAD:
+		v = vm_pop(M);
+
+		while (v-- > 0)
+			vm_putc(M, ' ');
 
 		break;
 	case OP_JMP: {
@@ -929,7 +940,7 @@ static void emit_link(struct vm_state *M, int from, int to) {
 
 static void emit_unit(struct vm_state *M, int loop, int limit, size_t *blocksize, const unsigned char **fmt) {
 	_Bool quoted = 0, escaped = 0;
-	int consumes = 0;
+	int consumes = 0, chop = 0;
 	int L1, L2, from, ch;
 
 	loop = (loop < 0)? 1 : loop;
@@ -979,22 +990,36 @@ static void emit_unit(struct vm_state *M, int loop, int limit, size_t *blocksize
 
 			consumes += bytes;
 
-			if (bytes > 0) {
-				emit_op(M, OP_COUNT);
-				emit_op(M, OP_NOT);
-				emit_jmp(M, &from);
+			{
+				int J1, J2;
+
+				if (bytes > 0) {
+					if (width > 0) {
+						emit_op(M, OP_COUNT);
+						emit_jmp(M, &J1);
+						emit_int(M, width);
+						emit_op(M, OP_PAD);
+						emit_op(M, OP_TRUE);
+						emit_jmp(M, &J2);
+						emit_link(M, J1, M->pc);
+					} else {
+						emit_op(M, OP_COUNT);
+						emit_op(M, OP_NOT);
+						emit_jmp(M, &J2);
+					}
+				}
+
+				emit_int(M, (fc == 's')? 0 : bytes);
+				emit_op(M, OP_READ);
+				emit_int(M, flags);
+				emit_int(M, MAX(0, width));
+				emit_int(M, MAX(0, prec));
+				emit_int(M, fc);
+				emit_op(M, OP_CONV);
+
+				if (bytes > 0)
+					emit_link(M, J2, M->pc);
 			}
-
-			emit_int(M, (fc == 's')? 0 : bytes);
-			emit_op(M, OP_READ);
-			emit_int(M, flags);
-			emit_int(M, MAX(0, width));
-			emit_int(M, MAX(0, prec));
-			emit_int(M, fc);
-			emit_op(M, OP_CONV);
-
-			if (bytes > 0)
-				emit_link(M, from, M->pc);
 
 			break;
 		}
@@ -1062,6 +1087,12 @@ copyout:
 			emit_putc(M, ch);
 
 			escaped = 0;
+
+			if (hxd_isspace(ch, 0)) {
+				chop++;
+			} else {
+				chop = 0;
+			}
 		}
 
 		++*fmt;
@@ -1083,8 +1114,10 @@ epilog:
 	emit_link(M, L2, M->pc);
 	emit_op(M, OP_POP); /* pop loop counter */
 
-	if (loop > 1)
-		emit_op(M, OP_TRIM);
+	if (loop > 1 && chop > 0) {
+		emit_int(M, chop);
+		emit_op(M, OP_CHOP);
+	}
 
 	*blocksize += (size_t)(consumes * loop);
 
