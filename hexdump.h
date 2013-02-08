@@ -34,6 +34,7 @@
 enum hxd_errors {
 	HXD_EFORMAT = HXD_EBASE,
 	HXD_EDRAINED,
+	HXD_ENOTSUPP,
 	HXD_EOOPS,
 	HXD_ELAST
 }; /* enum hxd_errors */
