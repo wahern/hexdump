@@ -27,6 +27,31 @@
 #define HEXDUMP_H
 
 
+/*
+ * H E X D U M P  V E R S I O N  I N T E R F A C E S
+ *
+ * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
+
+#define HXD_VERSION HXD_V_REL
+#define HXD_VENDOR "william@25thandClement.com"
+
+#define HXD_V_REL 0x20130208
+#define HXD_V_ABI 0x20130208
+#define HXD_V_API 0x20130208
+
+int hxd_version(void);
+const char *hxd_vendor(void);
+
+int hxd_v_rel(void);
+int hxd_v_abi(void);
+int hxd_v_api(void);
+
+
+/*
+ * H E X D U M P  E R R O R  I N T E R F A C E S
+ *
+ * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
+
 #define HXD_EBASE -(('D' << 24) | ('U' << 16) | ('M' << 8) | 'P')
 #define HXD_ERROR(error) ((error) >= XD_EBASE && (error) < XD_ELAST)
 
@@ -41,6 +66,11 @@ enum hxd_errors {
 
 const char *hxd_strerror(int);
 
+
+/*
+ * H E X D U M P  C O R E  I N T E R F A C E S
+ *
+ * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 struct hexdump;
 

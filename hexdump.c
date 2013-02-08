@@ -1360,6 +1360,31 @@ const char *hxd_strerror(int error) {
 } /* hxd_strerror() */
 
 
+int hxd_version(void) {
+	return HXD_VERSION;
+} /* hxd_version() */
+
+
+const char *hxd_vendor(void) {
+	return HXD_VENDOR;
+} /* hxd_vendor() */
+
+
+int hxd_v_rel(void) {
+	return HXD_V_REL;
+} /* hxd_v_rel() */
+
+
+int hxd_v_abi(void) {
+	return HXD_V_ABI;
+} /* hxd_v_abi() */
+
+
+int hxd_v_api(void) {
+	return HXD_V_API;
+} /* hxd_v_api() */
+
+
 #if HEXDUMP_MAIN
 
 #include <stdio.h>  /* FILE stdout stderr stdin fprintf(3) */
@@ -1404,7 +1429,7 @@ int main(int argc, char **argv) {
 	size_t len;
 	int error;
 
-	while (-1 != (opt = getopt(argc, argv, "e:f:Dh"))) {
+	while (-1 != (opt = getopt(argc, argv, "e:f:DVh"))) {
 		switch (opt) {
 		case 'e':
 			fmt = optarg;
@@ -1430,14 +1455,24 @@ int main(int argc, char **argv) {
 			dump = 1;
 
 			break;
+		case 'V':
+			printf("%s (hexdump.c) %.8X\n", argv[0], hxd_version());
+			printf("built   %s %s\n", __DATE__, __TIME__);
+			printf("vendor  %s\n", hxd_vendor());
+			printf("release %.8X\n", hxd_v_rel());
+			printf("abi     %.8X\n", hxd_v_abi());
+			printf("api     %.8X\n", hxd_v_api());
+
+			return 0;
 		default: {
 			FILE *fp = (opt == 'h')? stdout : stderr;
 
 			fprintf(fp,
-				"hexdump [-e:f:Dh] [file ...]\n" \
+				"hexdump [-e:f:DVh] [file ...]\n" \
 				"  -e FMT   hexdump string format\n" \
 				"  -f PATH  path to hexdump format file\n" \
 				"  -D       dump the compiled machine\n" \
+				"  -V       print version\n" \
 				"  -h       print usage help\n" \
 				"\n" \
 				"Report bugs to <william@25thandClement.com>\n"
