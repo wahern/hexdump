@@ -93,4 +93,12 @@ int hxd_flush(struct hexdump *);
 size_t hxd_read(struct hexdump *, void *, size_t);
 
 
+/*
+ * H E X D U M P  L U A  I N T E R F A C E S
+ *
+ * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
+
+int hxd_luaopen(/* pointer to lua_State */);
+
+
 #endif /* HEXDUMP_H */
