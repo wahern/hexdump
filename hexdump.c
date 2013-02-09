@@ -1502,7 +1502,7 @@ int main(int argc, char **argv) {
 		goto exit;
 	}
 
-	if (!optind) {
+	if (!argc) {
 		run(X, stdin, 1);
 	} else {
 		int i;
