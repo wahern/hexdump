@@ -1678,6 +1678,12 @@ int luaopen_hexdump(lua_State *L) {
 		lua_setfield(L, -2, macro[i].k);
 	}
 
+	lua_pushinteger(L, HXD_VERSION);
+	lua_setfield(L, -2, "VERSION");
+
+	lua_pushstring(L, HXD_VENDOR);
+	lua_setfield(L, -2, "VENDOR");
+
 	return 1;
 } /* luaopen_hexdump() */
 
