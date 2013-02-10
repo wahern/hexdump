@@ -50,6 +50,16 @@ int hxd_v_api(void);
 /*
  * H E X D U M P  E R R O R  I N T E R F A C E S
  *
+ * Hexdump internal error conditions are returned using regular int objects.
+ * System errors are loaded from errno as soon as encountered, and the value
+ * returned through the API like internal errors. DO NOT check errno, which
+ * may have been overwritten by subsequent error handling code. Internal
+ * errors are negative and utilize a simple high-order-byte namespacing
+ * protocol. This works because ISO C and POSIX guarantee that all system
+ * error codes are positive.
+ *
+ * hxd_strerror() will forward system errors to strerror(3).
+ *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 #define HXD_EBASE -(('D' << 24) | ('U' << 16) | ('M' << 8) | 'P')
@@ -58,13 +68,26 @@ int hxd_v_api(void);
 
 enum hxd_errors {
 	HXD_EFORMAT = HXD_EBASE,
+	/* a compile-time error signaling an invalid format string, format
+	   unit, or conversion specification syntax */
+
 	HXD_EDRAINED,
+	/* a compile-time error signaling that preceding conversions have
+	   already drained the input block */
+
 	HXD_ENOTSUPP,
+	/* a compile-time error returned for valid but unsupported
+	   conversion specifications */
+
 	HXD_EOOPS,
+	/* something horrible happened */
+
 	HXD_ELAST
 }; /* enum hxd_errors */
 
-const char *hxd_strerror(int);
+#define hxd_error_t int /* for documentation purposes only */
+
+const char *hxd_strerror(hxd_error_t);
 
 
 /*
@@ -74,21 +97,21 @@ const char *hxd_strerror(int);
 
 struct hexdump;
 
-struct hexdump *hxd_open(int *);
+struct hexdump *hxd_open(hxd_error_t *);
 
 void hxd_close(struct hexdump *);
 
 void hxd_reset(struct hexdump *);
 
-int hxd_compile(struct hexdump *, const char *, int);
+hxd_error_t hxd_compile(struct hexdump *, const char *, int);
 
 const char *hxd_help(struct hexdump *);
 
 size_t hxd_blocksize(struct hexdump *);
 
-int hxd_write(struct hexdump *, const void *, size_t);
+hxd_error_t hxd_write(struct hexdump *, const void *, size_t);
 
-int hxd_flush(struct hexdump *);
+hxd_error_t hxd_flush(struct hexdump *);
 
 size_t hxd_read(struct hexdump *, void *, size_t);
 
@@ -96,6 +119,49 @@ size_t hxd_read(struct hexdump *, void *, size_t);
 /*
  * H E X D U M P  L U A  I N T E R F A C E S
  *
+ * When built with -DHEXDUMP_LUALIB then luaopen_hexdump() will return a
+ * Lua module table:
+ *
+ *   local hexdump = require"hexdump"
+ *
+ *   hexdump.new()
+ *     Returns new context, just like hxd_open.
+ *
+ *   hexdump.apply(fmt:string, data:string)
+ *     Returns a formatted string, memoizing the context object for later
+ *     reuse with the same format.
+ *
+ * The module table also has a __call metamethod, which forwards to .apply.
+ * This allows doing require"hexdump"('/1 "%.2x"', "0123456789").
+ *
+ * Every context is a simple object with methods identical to the C library,
+ * including:
+ *
+ *   :reset()
+ *     Resets the internal buffers. Returns true.
+ *
+ *   :compile(fmt:string)
+ *     Parses and compiles the format string according to the rules of BSD
+ *     hexdump(1). Returns true on success, or throws an error on failure.
+ *
+ *   :blocksize()
+ *     Returns the blocksize of any compiled format string.
+ *
+ *   :write(data:string)
+ *     Processes the data string. The string DOES NOT have to be the same
+ *     length as the block size. It can be any size, although the formatted
+ *     output is buffered until drained with :read, so it's better to write
+ *     smallish chunks when processing large files. Returns true on success,
+ *     or throws an error on failure.
+ *
+ *   :flush()
+ *     Processes any data (less than the block size) in the input buffer
+ *     as-if EOF was received. Returns true on success, or throws an error
+ *     on failure.
+ *
+ *   :read()
+ *     Drains and returns the output buffer as a string.
+ * 
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 int luaopen_hexdump(/* pointer to lua_State */);

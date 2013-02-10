@@ -11,9 +11,6 @@ luacpath = $(libdir)/lua/5.2
 
 LUAC = $(prefix)/bin/luac
 
-
-CPPFLAGS += -I$(luainclude)
-
 ifeq ($(VENDOR.CC), sunpro)
 CFLAGS = -g
 SOFLAGS = -xcode=pic13
@@ -32,7 +29,7 @@ hexdump: hexdump.c hexdump.h
 	$(CC) $(CFLAGS) -o $@ $< $(CPPFLAGS) -DHEXDUMP_MAIN
 
 hexdump.so: hexdump.c hexdump.h
-	$(CC) $(CFLAGS) $(SOFLAGS) -o $@ $< $(CPPFLAGS) -DHEXDUMP_LUALIB
+	$(CC) $(CFLAGS) $(SOFLAGS) -o $@ $< $(CPPFLAGS) -I$(luainclude) -DHEXDUMP_LUALIB
 
 libhexdump.so: hexdump.c hexdump.h
 	$(CC) $(CFLAGS) $(SOFLAGS) -o $@ $< $(CPPFLAGS)

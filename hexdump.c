@@ -1263,6 +1263,11 @@ error:
 } /* hxd_compile() */
 
 
+size_t hxd_blocksize(struct hexdump *X) {
+	return X->vm.blocksize;
+} /* hxd_blocksize() */
+
+
 const char *hxd_help(struct hexdump *X) {
 	return "helps";
 } /* hxd_help() */
@@ -1324,7 +1329,7 @@ int hxd_flush(struct hexdump *X) {
 	return 0;
 error:
 	return error;
-} /* hxd_write() */
+} /* hxd_flush() */
 
 
 size_t hxd_read(struct hexdump *X, void *dst, size_t lim) {
@@ -1519,6 +1524,15 @@ static int hxdL_compile(lua_State *L) {
 } /* hxdL_compile() */
 
 
+static int hxdL_blocksize(lua_State *L) {
+	struct hexdump *X = hxdL_checkudata(L, 1);
+
+	lua_pushnumber(L, hxd_blocksize(X));
+
+	return 1;
+} /* hxdL_blocksize() */
+
+
 static int hxdL_write(lua_State *L) {
 	struct hexdump *X = hxdL_checkudata(L, 1);
 	const char *data;
@@ -1534,6 +1548,19 @@ static int hxdL_write(lua_State *L) {
 
 	return 1;
 } /* hxdL_write() */
+
+
+static int hxdL_flush(lua_State *L) {
+	struct hexdump *X = hxdL_checkudata(L, 1);
+	int error;
+
+	if ((error = hxd_flush(X)))
+		return luaL_error(L, "hexdump: %s", hxd_strerror(error));
+
+	lua_pushboolean(L, 1);
+
+	return 1;
+} /* hxdL_flush() */
 
 
 static int hxdL_read(lua_State *L) {
@@ -1564,10 +1591,12 @@ static int hxdL__gc(lua_State *L) {
 
 
 static const luaL_Reg hxdL_methods[] = {
-	{ "compile", &hxdL_compile },
-	{ "write",   &hxdL_write },
-	{ "read",    &hxdL_read },
-	{ NULL,      NULL },
+	{ "compile",   &hxdL_compile },
+	{ "blocksize", &hxdL_blocksize },
+	{ "write",     &hxdL_write },
+	{ "flush",     &hxdL_flush },
+	{ "read",      &hxdL_read },
+	{ NULL,        NULL },
 }; /* hxdL_methods[] */
 
 
