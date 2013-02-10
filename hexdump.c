@@ -1720,8 +1720,24 @@ int main(int argc, char **argv) {
 	size_t len;
 	int error;
 
-	while (-1 != (opt = getopt(argc, argv, "e:f:oBLDVh"))) {
+	while (-1 != (opt = getopt(argc, argv, "bcCde:f:oxBLDVh"))) {
 		switch (opt) {
+		case 'b':
+			fmt = "\"%07.7_ax \" 16/1 \"%03o \" \"\\n\"";
+
+			break;
+		case 'c':
+			fmt = "\"%07.7_ax \" 16/1 \"%3_c \" \"\\n\"";
+
+			break;
+		case 'C':
+			fmt = "\"%08.8_ax  \" 8/1 \"%02x \" \"  \" 8/1 \"%02x \"\n" \
+			      "\"  |\" 16/1 \"%_p\" \"|\\n\"";
+			break;
+		case 'd':
+			fmt = "\"%07.7_ax \" 8/2 \"  %05u \" \"\\n\"";
+
+			break;
 		case 'e':
 			fmt = optarg;
 
@@ -1744,6 +1760,10 @@ int main(int argc, char **argv) {
 		}
 		case 'o':
 			fmt = "\"%07.7_ao   \" 8/2 \" %06o \" \"\\n\"";
+
+			break;
+		case 'x':
+			fmt = "\"%07.7_ax \" 8/2 \"   %04x \" \"\\n\"";
 
 			break;
 		case 'B':
@@ -1771,10 +1791,15 @@ int main(int argc, char **argv) {
 			FILE *fp = (opt == 'h')? stdout : stderr;
 
 			fprintf(fp,
-				"hexdump [-e:f:oBLDVh] [file ...]\n" \
+				"hexdump [-bcCde:f:oxBLDVh] [file ...]\n" \
+				"  -b       one-byte octal display\n" \
+				"  -c       one-byte character display\n" \
+				"  -C       canonical hex+ASCII display\n" \
+				"  -d       two-byte decimal display\n" \
 				"  -e FMT   hexdump string format\n" \
 				"  -f PATH  path to hexdump format file\n" \
 				"  -o       two-byte octal display\n" \
+				"  -x       two-byte hexadecimal display\n" \
 				"  -B       load words big-endian\n" \
 				"  -L       load words little-endian\n" \
 				"  -D       dump the compiled machine\n" \
