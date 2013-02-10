@@ -1713,14 +1713,14 @@ static void run(struct hexdump *X, FILE *fp, _Bool flush) {
 int main(int argc, char **argv) {
 	extern char *optarg;
 	extern int optind;
-	int opt;
+	int opt, flags = 0;
 	_Bool dump = 0;
 	struct hexdump *X;
 	char buf[256], *fmt = "16/1 %.2x", fmtbuf[512];
 	size_t len;
 	int error;
 
-	while (-1 != (opt = getopt(argc, argv, "e:f:oDVh"))) {
+	while (-1 != (opt = getopt(argc, argv, "e:f:oBLDVh"))) {
 		switch (opt) {
 		case 'e':
 			fmt = optarg;
@@ -1746,6 +1746,14 @@ int main(int argc, char **argv) {
 			fmt = "\"%07.7_ao   \" 8/2 \" %06o \" \"\\n\"";
 
 			break;
+		case 'B':
+			flags |= HXD_BIG_ENDIAN;
+
+			break;
+		case 'L':
+			flags |= HXD_LITTLE_ENDIAN;
+
+			break;
 		case 'D':
 			dump = 1;
 
@@ -1763,10 +1771,12 @@ int main(int argc, char **argv) {
 			FILE *fp = (opt == 'h')? stdout : stderr;
 
 			fprintf(fp,
-				"hexdump [-e:f:DVh] [file ...]\n" \
+				"hexdump [-e:f:oBLDVh] [file ...]\n" \
 				"  -e FMT   hexdump string format\n" \
 				"  -f PATH  path to hexdump format file\n" \
 				"  -o       two-byte octal display\n" \
+				"  -B       load words big-endian\n" \
+				"  -L       load words little-endian\n" \
 				"  -D       dump the compiled machine\n" \
 				"  -V       print version\n" \
 				"  -h       print usage help\n" \
@@ -1785,7 +1795,7 @@ int main(int argc, char **argv) {
 	if (!(X = hxd_open(&error)))
 		OOPS("open: %s", hxd_strerror(error));
 
-	if ((error = hxd_compile(X, fmt, 0)))
+	if ((error = hxd_compile(X, fmt, flags)))
 		OOPS("%s: %s", fmt, hxd_strerror(error));
 
 	if (dump) {
