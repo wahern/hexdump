@@ -648,15 +648,15 @@ static void vm_conv(struct vm_state *M, int flags, int width, int prec, int fc, 
 
 	switch (fc) {
 	case 's':
-		len = snprintf(buf, sizeof buf, fmt, (int)MAX(width, 0), (int)MAX(prec, 0), s);
+		len = snprintf(buf, sizeof buf, fmt, MAX(width, 0), MAX(prec, 0), s);
 
 		break;
 	case 'u':
-		len = snprintf(buf, sizeof buf, fmt, (int)MAX(width, 0), (int)MAX(prec, 0), (unsigned)word);
+		len = snprintf(buf, sizeof buf, fmt, MAX(width, 0), prec, (unsigned)word);
 
 		break;
 	default:
-		len = snprintf(buf, sizeof buf, fmt, (int)MAX(width, 0), (int)MAX(prec, 0), (int)word);
+		len = snprintf(buf, sizeof buf, fmt, MAX(width, 0), prec, (int)word);
 
 		break;
 	}
@@ -1042,14 +1042,16 @@ static void emit_unit(struct vm_state *M, int loop, int limit, size_t *blocksize
 				emit_int(M, (fc == 's')? 0 : bytes);
 				emit_op(M, OP_READ);
 				emit_int(M, flags);
-				emit_int(M, MAX(0, width));
-				emit_int(M, MAX(0, prec));
+				emit_int(M, width);
+				emit_int(M, prec);
 				emit_int(M, fc);
 				emit_op(M, OP_CONV);
 
 				if (bytes > 0)
 					emit_link(M, J2, M->pc);
 			}
+
+			chop = 0;
 
 			break;
 		}
