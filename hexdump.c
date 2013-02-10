@@ -1532,9 +1532,10 @@ static int hxdL_new(lua_State *L) {
 static int hxdL_compile(lua_State *L) {
 	struct hexdump *X = hxdL_checkudata(L, 1);
 	const char *fmt = luaL_checkstring(L, 2);
+	int flags = luaL_optint(L, 3, 0);
 	int error;
 
-	if ((error = hxd_compile(X, fmt, 0)))
+	if ((error = hxd_compile(X, fmt, flags)))
 		return luaL_error(L, "hexdump: %s", hxd_strerror(error));
 
 	lua_pushboolean(L, 1);
@@ -1641,6 +1642,14 @@ static void hxdL_register(lua_State *L, const luaL_Reg *l) {
 
 
 int luaopen_hexdump(lua_State *L) {
+	static const struct { const char *k; int v; } macro[] = {
+		{ "NATIVE",        HXD_NATIVE },
+		{ "NETWORK",       HXD_NETWORK },
+		{ "BIG_ENDIAN",    HXD_BIG_ENDIAN },
+		{ "LITTLE_ENDIAN", HXD_LITTLE_ENDIAN },
+	};
+	unsigned i;
+
 	if (luaL_newmetatable(L, HEXDUMP_CLASS)) {
 		hxdL_register(L, hxdL_metatable);
 		lua_newtable(L);
@@ -1663,6 +1672,11 @@ int luaopen_hexdump(lua_State *L) {
 	lua_setmetatable(L, -3);
 
 	lua_setfield(L, -2, "apply"); /* global.apply */
+
+	for (i = 0; i < countof(macro); i++) {
+		lua_pushinteger(L, macro[i].v);
+		lua_setfield(L, -2, macro[i].k);
+	}
 
 	return 1;
 } /* luaopen_hexdump() */
