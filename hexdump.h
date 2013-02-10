@@ -103,6 +103,12 @@ void hxd_close(struct hexdump *);
 
 void hxd_reset(struct hexdump *);
 
+#define HXD_BYTEORDER(x)  (0x03 & (x))
+#define HXD_NATIVE         0x00
+#define HXD_NETWORK        HXD_BIG_ENDIAN
+#define HXD_BIG_ENDIAN     0x01
+#define HXD_LITTLE_ENDIAN  0x02
+
 hxd_error_t hxd_compile(struct hexdump *, const char *, int);
 
 const char *hxd_help(struct hexdump *);

@@ -416,6 +416,8 @@ static const char *vm_strop(enum vm_opcode op) {
 struct vm_state {
 	jmp_buf trap;
 
+	int flags;
+
 	size_t blocksize;
 
 	int64_t stack[8];
@@ -804,9 +806,15 @@ static void vm_exec(struct vm_state *M) {
 		n = vm_pop(M);
 		v = 0;
 
-		for (i = 0; i < n && M->i.p < M->i.pe; i++) {
-			v <<= 8;
-			v |= *M->i.p++;
+		if (M->flags & HXD_BIG_ENDIAN) {
+			for (i = 0; i < n && M->i.p < M->i.pe; i++) {
+				v <<= 8;
+				v |= *M->i.p++;
+			}
+		} else {
+			for (i = 0; i < n && M->i.p < M->i.pe; i++) {
+				v |= *M->i.p++ << (8 * i);
+			}
 		}
 
 		vm_push(M, v);
@@ -1219,6 +1227,15 @@ int hxd_compile(struct hexdump *X, const const char *_fmt, int flags) {
 
 	if ((error = vm_enter(&X->vm)))
 		goto error;
+
+	X->vm.flags = flags;
+
+	if (!HXD_BYTEORDER(X->vm.flags)) {
+		union { int i; char c; } u = { 0 };
+
+		u.c = 1;
+		X->vm.flags |= (u.i & 0xff)? HXD_LITTLE_ENDIAN : HXD_BIG_ENDIAN;
+	}
 
 	while (skipws(&fmt, 1)) {
 		int lc, loop, limit;
