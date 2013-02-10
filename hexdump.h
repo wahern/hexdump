@@ -98,7 +98,7 @@ size_t hxd_read(struct hexdump *, void *, size_t);
  *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-int hxd_luaopen(/* pointer to lua_State */);
+int luaopen_hexdump(/* pointer to lua_State */);
 
 
 #endif /* HEXDUMP_H */
