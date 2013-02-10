@@ -36,8 +36,8 @@
 #define HXD_VENDOR "william@25thandClement.com"
 
 #define HXD_V_REL 0x20130210
-#define HXD_V_ABI 0x20130208
-#define HXD_V_API 0x20130208
+#define HXD_V_ABI 0x20130210
+#define HXD_V_API 0x20130210
 
 int hxd_version(void);
 const char *hxd_vendor(void);
