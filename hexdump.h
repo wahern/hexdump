@@ -130,10 +130,17 @@ size_t hxd_read(struct hexdump *, void *, size_t);
  *
  *   local hexdump = require"hexdump"
  *
+ *   hexdump.NATIVE 
+ *   hexdump.NETWORK
+ *   hexdump.BIG_ENDIAN
+ *   hexdump.LITTLE_ENDIAN
+ *     Bitwise flags which configure word byte order. The default is the
+ *     native byte order.
+ *
  *   hexdump.new()
  *     Returns new context, just like hxd_open.
  *
- *   hexdump.apply(fmt:string, data:string)
+ *   hexdump.apply(fmt:string, [flags:int,] data:string, ...)
  *     Returns a formatted string, memoizing the context object for later
  *     reuse with the same format.
  *

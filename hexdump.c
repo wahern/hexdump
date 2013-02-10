@@ -1452,50 +1452,68 @@ static struct hexdump *hxdL_push(lua_State *L) {
 
 
 static int hxdL_apply(lua_State *L) {
-	const char *fmt, *data, *p, *pe;
-	size_t size, n;
+	const char *fmt, *p, *pe;
+	size_t n;
 	struct hexdump *X;
 	luaL_Buffer B;
+	int top = lua_gettop(L), data = 2, flags = 0;
 	int error;
 
 	fmt = luaL_checkstring(L, 1);
-	data = luaL_checklstring(L, 2, &size);
+
+	if (lua_type(L, 2) == LUA_TNUMBER) {
+		flags = lua_tointeger(L, 2);
+		data = 3;
+	}
 
 	lua_pushvalue(L, 1);
-	lua_gettable(L, lua_upvalueindex(1));
+	lua_rawget(L, lua_upvalueindex(1));
+
+	if (lua_isnil(L, -1)) {
+		lua_pop(L, 1);
+
+		lua_newtable(L);
+
+		lua_pushvalue(L, 1);
+		lua_pushvalue(L, -2);
+		lua_rawset(L, lua_upvalueindex(1));
+	}
+
+	lua_rawgeti(L, -1, flags);
 
 	if (lua_isnil(L, -1)) {
 		lua_pop(L, 1);
 
 		X = hxdL_push(L);
 
-		if ((error = hxd_compile(X, fmt, 0)))
+		if ((error = hxd_compile(X, fmt, flags)))
 			goto error;
 
-		lua_pushvalue(L, 1);
-		lua_pushvalue(L, -2);
-		lua_settable(L, lua_upvalueindex(1));
+		lua_pushvalue(L, -1);
+		lua_rawseti(L, -3, flags);
 	} else {
 		X = hxdL_checkudata(L, -1);
 	}
 
 	hxd_reset(X);
 
-	p = data;
-	pe = &data[size];
-
 	luaL_buffinit(L, &B);
 
-	while (p < pe) {
-		n = MIN(pe - p, 1024);
+	for (; data <= top; data++) {
+		p = luaL_checklstring(L, data, &n);
+		pe = p + n;
 
-		if ((error = hxd_write(X, p, n)))
-			goto error;
+		while (p < pe) {
+			n = MIN(pe - p, 1024);
 
-		p += n;
+			if ((error = hxd_write(X, p, n)))
+				goto error;
 
-		while ((n = hxd_read(X, luaL_prepbuffer(&B), LUAL_BUFFERSIZE)))
-			luaL_addsize(&B, n);
+			p += n;
+
+			while ((n = hxd_read(X, luaL_prepbuffer(&B), LUAL_BUFFERSIZE)))
+				luaL_addsize(&B, n);
+		}
 	}
 
 	if ((error = hxd_flush(X)))
