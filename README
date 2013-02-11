@@ -37,7 +37,20 @@ the C API can be found in hxdL_apply() in hexdump.c. Just ignore the parts
 where the context object is cached. Also see main().
 
 
-== BUGS & CONFORMANCE ==
+== EXTENSIONS ==
+
+o Explicit byte order support. By default the native byte order is used when
+  loading multibyte words. Currently only big-endian and little-endian is
+  supported, however.
+
+o 3-octet-word conversions. BSD hexdump(1) only supports loading of 1-, 2-,
+  and 4-octet words. In the future I'd also like to support up to 16-octet
+  words, which would help debug more complex protocols, like some Microsoft
+  protocols which are fond of such objects as 16-byte, little-endian UUIDs.
+  Maybe binary words, too.
+
+
+== BUGS ==
 
 o No floating point support. In particular, no %E, %e, %f, %G, or %g
   conversions.
@@ -57,5 +70,6 @@ o No implicit looping of trailing units to consume the remainder of
 
   Note the additional 16/1 loop specification in the second format block.
 
-o Unlike hexdump(1), runs of identical blocks are not skipped.
+o Unlike hexdump(1), runs of identical blocks are not skipped by default.
+  There's no configuration option to change this, yet, either.
 
