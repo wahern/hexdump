@@ -1754,26 +1754,25 @@ int main(int argc, char **argv) {
 	int opt, flags = 0;
 	_Bool dump = 0;
 	struct hexdump *X;
-	char buf[256], *fmt = "16/1 %.2x", fmtbuf[512];
+	char buf[256], *fmt = HEXDUMP_x, fmtbuf[512];
 	size_t len;
 	int error;
 
 	while (-1 != (opt = getopt(argc, argv, "bcCde:f:oxBLDVh"))) {
 		switch (opt) {
 		case 'b':
-			fmt = "\"%07.7_ax \" 16/1 \"%03o \" \"\\n\"";
+			fmt = HEXDUMP_b;
 
 			break;
 		case 'c':
-			fmt = "\"%07.7_ax \" 16/1 \"%3_c \" \"\\n\"";
+			fmt = HEXDUMP_c;
 
 			break;
 		case 'C':
-			fmt = "\"%08.8_ax  \" 8/1 \"%02x \" \"  \" 8/1 \"%02x \"\n" \
-			      "\"  |\" 16/1 \"%_p\" \"|\\n\"";
+			fmt = HEXDUMP_C;
 			break;
 		case 'd':
-			fmt = "\"%07.7_ax \" 8/2 \"  %05u \" \"\\n\"";
+			fmt = HEXDUMP_d;
 
 			break;
 		case 'e':
@@ -1797,11 +1796,11 @@ int main(int argc, char **argv) {
 			break;
 		}
 		case 'o':
-			fmt = "\"%07.7_ao   \" 8/2 \" %06o \" \"\\n\"";
+			fmt = HEXDUMP_o;
 
 			break;
 		case 'x':
-			fmt = "\"%07.7_ax \" 8/2 \"   %04x \" \"\\n\"";
+			fmt = HEXDUMP_x;
 
 			break;
 		case 'B':

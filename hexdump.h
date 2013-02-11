@@ -35,9 +35,9 @@
 #define HXD_VERSION HXD_V_REL
 #define HXD_VENDOR "william@25thandClement.com"
 
-#define HXD_V_REL 0x20130210
+#define HXD_V_REL 0x20130211
 #define HXD_V_ABI 0x20130210
-#define HXD_V_API 0x20130210
+#define HXD_V_API 0x20130211
 
 int hxd_version(void);
 const char *hxd_vendor(void);
@@ -120,6 +120,22 @@ hxd_error_t hxd_write(struct hexdump *, const void *, size_t);
 hxd_error_t hxd_flush(struct hexdump *);
 
 size_t hxd_read(struct hexdump *, void *, size_t);
+
+
+/*
+ * H E X D U M P  C O M M O N  F O R M A T S
+ *
+ * Predefined formats for hexdump(1) -b, -c, -C, -d, -o, and -x.
+ *
+ * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
+
+#define HEXDUMP_b "\"%07.7_ax \" 16/1 \"%03o \" \"\\n\""
+#define HEXDUMP_c "\"%07.7_ax \" 16/1 \"%3_c \" \"\\n\""
+#define HEXDUMP_C "\"%08.8_ax  \" 8/1 \"%02x \" \"  \" 8/1 \"%02x \"\n" \
+                  "\"  |\" 16/1 \"%_p\" \"|\\n\""
+#define HEXDUMP_d "\"%07.7_ax \" 8/2 \"  %05u \" \"\\n\""
+#define HEXDUMP_o "\"%07.7_ao   \" 8/2 \" %06o \" \"\\n\""
+#define HEXDUMP_x "\"%07.7_ax \" 8/2 \"   %04x \" \"\\n\""
 
 
 /*
