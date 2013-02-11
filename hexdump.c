@@ -1666,6 +1666,14 @@ int luaopen_hexdump(lua_State *L) {
 		{ "BIG_ENDIAN",    HXD_BIG_ENDIAN },
 		{ "LITTLE_ENDIAN", HXD_LITTLE_ENDIAN },
 	};
+	static const struct { const char *k; const char *v; } predef[] = {
+		{ "b", HEXDUMP_b },
+		{ "c", HEXDUMP_c },
+		{ "C", HEXDUMP_C },
+		{ "d", HEXDUMP_d },
+		{ "o", HEXDUMP_o },
+		{ "x", HEXDUMP_x },
+	};
 	unsigned i;
 
 	if (luaL_newmetatable(L, HEXDUMP_CLASS)) {
@@ -1694,6 +1702,11 @@ int luaopen_hexdump(lua_State *L) {
 	for (i = 0; i < countof(macro); i++) {
 		lua_pushinteger(L, macro[i].v);
 		lua_setfield(L, -2, macro[i].k);
+	}
+
+	for (i = 0; i < countof(predef); i++) {
+		lua_pushstring(L, predef[i].v);
+		lua_setfield(L, -2, predef[i].k);
 	}
 
 	lua_pushinteger(L, HXD_VERSION);
