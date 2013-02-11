@@ -1,0 +1,62 @@
+== DEPENDENCIES ==
+
+None, except that the Lua module requires headers from Lua 5.1, Lua 5.2, or
+LuaJIT.
+
+The source is mostly C99 compliant. The library uses POSIX _setjmp/_longjmp
+instead of C99 setjmp/longjmp. The command-line utility uses POSIX
+getopt(3).
+
+The Makefile requires GNU Make, however, so it can introspect the
+compilation environment. (GNU Make, Solaris Make, and the various BSD Make
+implementations all support shell command expansion in macros differently.)
+
+
+== BUILDING ==
+
+There are three build targets defined in the included Makefile, but no
+install targets, yet.
+
+o hexdump - Command-line utility substantially like BSD hexdump(1). main()
+        is built with -DHEXDUMP_MAIN.
+
+o libhexdump.so - Dynamic library.
+
+o hexdump.so - Lua module. The Lua interfaces are built with
+        -DHEXDUMP_LUALIB.
+
+There's no reason you couldn't just plop hexdump.c and hexdump.h into your
+own project, and that's how I use the library. The two source files will
+never be split up.
+
+
+== USAGE ==
+
+See hexdump.h for some documentation. The most concise example of usage of
+the C API can be found in hxdL_apply() in hexdump.c. Just ignore the parts
+where the context object is cached. Also see main().
+
+
+== BUGS & CONFORMANCE ==
+
+o No floating point support. In particular, no %E, %e, %f, %G, or %g
+  conversions.
+
+o No %_A[dox] conversions. %_a[dox] works fine, however.
+
+o No implicit looping of trailing units to consume the remainder of
+  a block. Instead of
+
+  	"%08.8_ax  " 8/1 "%02x " "  " 8/1 "%02x "
+  	"  |" "%_p" "|\n"
+
+  you must write
+
+  	"%08.8_ax  " 8/1 "%02x " "  " 8/1 "%02x "
+  	"  |" 16/1 "%_p" "|\n"
+
+  Note the additional 16/1 loop specification in the second format
+  block.
+
+o Unlike hexdump(1), runs of identical blocks are not skipped.
+
