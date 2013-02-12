@@ -23,8 +23,8 @@
  * USE OR OTHER DEALINGS IN THE SOFTWARE.
  * ==========================================================================
  */
-#if HEXDUMP_MAIN && !defined _GNU_SOURCE
-#define _GNU_SOURCE
+#if __STDC__ && !_XOPEN_SOURCE
+#define _XOPEN_SOURCE 600 /* _setjmp(3), _longjmp(3), getopt(3) */
 #endif
 
 #include <limits.h> /* INT_MAX */
