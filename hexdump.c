@@ -84,9 +84,6 @@
 #define PASTE(x, y) x##y
 #define XPASTE(x, y) PASTE(x, y)
 
-#define STRINGIFY_(s) #s
-#define STRINGIFY(s) STRINGIFY_(s)
-
 
 static unsigned char toprint(unsigned char chr) {
 	return (chr > 0x1f && chr < 0x7f)? chr : '.';
@@ -228,8 +225,6 @@ static inline int getint(const unsigned char **fmt) {
 #define F_MINUS 4
 #define F_SPACE 8
 #define F_PLUS 16
-
-#define CHR(x) (STRINGIFY(x)[0])
 
 #define FC2(x, y) (((0xff & (y)) << 8) | (0xff & (x)))
 #define FC1(x) (0xff & (x))
