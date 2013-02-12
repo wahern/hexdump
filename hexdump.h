@@ -153,6 +153,15 @@ size_t hxd_read(struct hexdump *, void *, size_t);
  *     Bitwise flags which configure word byte order. The default is the
  *     native byte order.
  *
+ *   hexdump.b 
+ *   hexdump.c
+ *   hexdump.C
+ *   hexdump.d
+ *   hexdump.o
+ *   hexdump.x
+ *     Predefined format strings of the hexdump(1) options -x, -c, -C, -d,
+ *     -o, and -x, respectively.
+ *
  *   hexdump.new()
  *     Returns new context, just like hxd_open.
  *
@@ -174,7 +183,7 @@ size_t hxd_read(struct hexdump *, void *, size_t);
  *     hexdump(1). Returns true on success, or throws an error on failure.
  *
  *   :blocksize()
- *     Returns the blocksize of any compiled format string.
+ *     Returns the block size of any compiled format string.
  *
  *   :write(data:string)
  *     Processes the data string. The string DOES NOT have to be the same
