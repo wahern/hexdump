@@ -231,7 +231,7 @@ static inline int getint(const unsigned char **fmt) {
 
 #define CHR(x) (STRINGIFY(x)[0])
 
-#define FC2(x, y) ((0xff & (y)) << 8) | (0xff & (x))
+#define FC2(x, y) (((0xff & (y)) << 8) | (0xff & (x)))
 #define FC1(x) (0xff & (x))
 #define FC(...) XPASTE(FC, NARG(__VA_ARGS__))(__VA_ARGS__)
 
@@ -372,38 +372,62 @@ enum vm_opcode {
 	OP_PAD,   /* 1/0 | emit padding space to output buffer */
 	OP_JMP,   /* 2/0 | conditional jump to address */
 	OP_RESET, /* 0/0 | reset input buffer position */
+
+	/*
+	 * Optimized conversions with predicates.
+	 */
+#define OK_IS0FIXED(F, W, P, N) \
+		(((W) == (N) && ((F) == F_ZERO) && (P) <= 0) || \
+		 ((W) == -1 && (P) == (N)) || \
+		 ((W) == (P) && (W) == (N)))
+
+#define OK_2XBYTE(F, W, P) OK_IS0FIXED((F), (W), (P), 2)
+	OP_2XBYTE,
+
+#define OK_PBYTE(F, W, P) ((W) <= 1 && (P) <= 1)
+	OP_PBYTE,
+
+#define OK_7XADDR(F, W, P) OK_IS0FIXED((F), (W), (P), 7)
+	OP_7XADDR,
+
+#define OK_8XADDR(F, W, P) OK_IS0FIXED((F), (W), (P), 8)
+	OP_8XADDR,
 }; /* enum vm_opcode */
 
 
 static const char *vm_strop(enum vm_opcode op) {
 	static const char *txt[] = {
-		[OP_HALT]  = "HALT",
-		[OP_NOOP]  = "NOOP",
-		[OP_TRAP]  = "TRAP",
-		[OP_PC]    = "PC",
-		[OP_TRUE]  = "TRUE",
-		[OP_FALSE] = "FALSE",
-		[OP_ZERO]  = "ZERO",
-		[OP_ONE]   = "ONE",
-		[OP_TWO]   = "TWO",
-		[OP_I8]    = "I8",
-		[OP_I16]   = "I16",
-		[OP_I32]   = "I32",
-		[OP_NEG]   = "NEG",
-		[OP_SUB]   = "SUB",
-		[OP_ADD]   = "ADD",
-		[OP_NOT]   = "NOT",
-		[OP_POP]   = "POP",
-		[OP_DUP]   = "DUP",
-		[OP_SWAP]  = "SWAP",
-		[OP_READ]  = "READ",
-		[OP_COUNT] = "COUNT",
-		[OP_PUTC]  = "PUTC",
-		[OP_CONV]  = "CONV",
-		[OP_CHOP]  = "CHOP",
-		[OP_PAD]   = "PAD",
-		[OP_JMP]   = "JMP",
-		[OP_RESET] = "RESET",
+		[OP_HALT]   = "HALT",
+		[OP_NOOP]   = "NOOP",
+		[OP_TRAP]   = "TRAP",
+		[OP_PC]     = "PC",
+		[OP_TRUE]   = "TRUE",
+		[OP_FALSE]  = "FALSE",
+		[OP_ZERO]   = "ZERO",
+		[OP_ONE]    = "ONE",
+		[OP_TWO]    = "TWO",
+		[OP_I8]     = "I8",
+		[OP_I16]    = "I16",
+		[OP_I32]    = "I32",
+		[OP_NEG]    = "NEG",
+		[OP_SUB]    = "SUB",
+		[OP_ADD]    = "ADD",
+		[OP_NOT]    = "NOT",
+		[OP_POP]    = "POP",
+		[OP_DUP]    = "DUP",
+		[OP_SWAP]   = "SWAP",
+		[OP_READ]   = "READ",
+		[OP_COUNT]  = "COUNT",
+		[OP_PUTC]   = "PUTC",
+		[OP_CONV]   = "CONV",
+		[OP_CHOP]   = "CHOP",
+		[OP_PAD]    = "PAD",
+		[OP_JMP]    = "JMP",
+		[OP_RESET]  = "RESET",
+		[OP_2XBYTE] = "2XBYTE",
+		[OP_PBYTE]  = "PBYTE",
+		[OP_7XADDR] = "7XADDR",
+		[OP_8XADDR] = "8XADDR",
 	};
 
 	if ((int)op >= 0 && op < (int)countof(txt) && txt[op])
@@ -523,6 +547,11 @@ NORETURN static void vm_throw(struct vm_state *M, int error) {
 } /* vm_throw() */
 
 
+static inline unsigned char vm_getc(struct vm_state *M) {
+	return (M->i.p < M->i.pe)? *M->i.p++ : 0;
+} /* vm_getc() */
+
+
 static void vm_putc(struct vm_state *M, unsigned char ch) {
 	unsigned char *tmp;
 	size_t size, p;
@@ -546,6 +575,17 @@ static void vm_putc(struct vm_state *M, unsigned char ch) {
 
 	*M->o.p++ = ch;
 } /* vm_putc() */
+
+
+static void vm_putx(struct vm_state *M, unsigned char ch) {
+	vm_putc(M, "0123456789abcdef"[0x0f & (ch >> 4)]);
+	vm_putc(M, "0123456789abcdef"[0x0f & (ch >> 0)]);
+} /* vm_putx() */
+
+
+static inline size_t vm_address(struct vm_state *M) {
+	return M->i.address + (M->i.p - M->i.base);
+} /* vm_address() */
 
 
 static void vm_push(struct vm_state *M, int64_t v) {
@@ -697,6 +737,7 @@ static void vm_exec(struct vm_state *M) {
 		L(NEG), L(SUB), L(ADD), L(NOT),
 		L(POP), L(DUP), L(SWAP), L(READ), L(COUNT), L(PUTC), L(CONV),
 		L(CHOP), L(PAD), L(JMP), L(RESET),
+		L(2XBYTE), L(PBYTE), L(7XADDR), L(8XADDR),
 	};
 #endif
 	int64_t v;
@@ -875,6 +916,32 @@ static void vm_exec(struct vm_state *M) {
 		M->i.p = M->i.base;
 
 		NEXT;
+	CASE(2XBYTE):
+		vm_putx(M, vm_getc(M));
+
+		NEXT;
+	CASE(PBYTE):
+		vm_putc(M, toprint(vm_getc(M)));
+
+		NEXT;
+	CASE(7XADDR): {
+		size_t addr = vm_address(M);
+		vm_putc(M, "0123456789abcdef"[0x0f & (addr >> 24)]);
+		vm_putx(M, (addr >> 16));
+		vm_putx(M, (addr >> 8));
+		vm_putx(M, (addr >> 0));
+
+		NEXT;
+	}
+	CASE(8XADDR): {
+		size_t addr = vm_address(M);
+		vm_putx(M, (addr >> 24));
+		vm_putx(M, (addr >> 16));
+		vm_putx(M, (addr >> 8));
+		vm_putx(M, (addr >> 0));
+
+		NEXT;
+	}
 	END;
 } /* vm_exec() */
 
@@ -1047,13 +1114,23 @@ static void emit_unit(struct vm_state *M, int loop, int limit, size_t *blocksize
 					}
 				}
 
-				emit_int(M, (fc == 's')? 0 : bytes);
-				emit_op(M, OP_READ);
-				emit_int(M, flags);
-				emit_int(M, width);
-				emit_int(M, prec);
-				emit_int(M, fc);
-				emit_op(M, OP_CONV);
+				if (fc == 'x' && OK_2XBYTE(flags, width, prec)) {
+					emit_op(M, OP_2XBYTE);
+				} else if (fc == FC('_', 'p') && OK_PBYTE(flags, width, prec)) {
+					emit_op(M, OP_PBYTE);
+				} else if (fc == FC('_', 'x') && OK_7XADDR(flags, width, prec)) {
+					emit_op(M, OP_7XADDR);
+				} else if (fc == FC('_', 'x') && OK_8XADDR(flags, width, prec)) {
+					emit_op(M, OP_8XADDR);
+				} else {
+					emit_int(M, (fc == 's')? 0 : bytes);
+					emit_op(M, OP_READ);
+					emit_int(M, flags);
+					emit_int(M, width);
+					emit_int(M, prec);
+					emit_int(M, fc);
+					emit_op(M, OP_CONV);
+				}
 
 				if (bytes > 0)
 					emit_link(M, J2, M->pc);
@@ -1218,7 +1295,7 @@ void hxd_reset(struct hexdump *X) {
 } /* hxd_reset() */
 
 
-int hxd_compile(struct hexdump *X, const const char *_fmt, int flags) {
+int hxd_compile(struct hexdump *X, const char *_fmt, int flags) {
 	const unsigned char *fmt = (const unsigned char *)_fmt;
 	unsigned char *tmp;
 	int error;
