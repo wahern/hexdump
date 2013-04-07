@@ -26,8 +26,8 @@ o hexdump.so - Lua module. The Lua interfaces are built with
         -DHEXDUMP_LUALIB.
 
 There's no reason you couldn't just plop hexdump.c and hexdump.h into your
-own project, and that's how I use the library. The two source files will
-never be split up.
+own project, and that's how I use the library. Neither of the two source
+files will ever be split up.
 
 
 == USAGE ==
