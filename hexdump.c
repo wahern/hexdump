@@ -1789,6 +1789,7 @@ int luaopen_hexdump(lua_State *L) {
 		{ "NETWORK",       HXD_NETWORK },
 		{ "BIG_ENDIAN",    HXD_BIG_ENDIAN },
 		{ "LITTLE_ENDIAN", HXD_LITTLE_ENDIAN },
+		{ "NOPADDING",     HXD_NOPADDING },
 	};
 	static const struct { const char *k; const char *v; } predef[] = {
 		{ "b", HEXDUMP_b },
@@ -1797,6 +1798,7 @@ int luaopen_hexdump(lua_State *L) {
 		{ "d", HEXDUMP_d },
 		{ "o", HEXDUMP_o },
 		{ "x", HEXDUMP_x },
+		{ "i", HEXDUMP_i },
 	};
 	unsigned i;
 
