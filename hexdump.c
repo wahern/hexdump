@@ -535,10 +535,18 @@ NOTUSED static void vm_dump(struct vm_state *M, FILE *fp) {
 } /* vm_dump() */
 
 
+#ifdef _WIN32
+#define vm_enter(M) setjmp((M)->trap)
+#else
 #define vm_enter(M) _setjmp((M)->trap)
+#endif
 
 NORETURN static void vm_throw(struct vm_state *M, int error) {
+#ifdef _WIN32
+	longjmp(M->trap, error);
+#else
 	_longjmp(M->trap, error);
+#endif
 } /* vm_throw() */
 
 
@@ -1807,7 +1815,32 @@ int luaopen_hexdump() {
 
 #include <unistd.h> /* getopt(3) */
 
-#include <err.h>
+#ifndef _WIN32
+#include <err.h>    /* err(3) errx(3) */
+#else
+#include <stdarg.h>
+
+static void err(int eval, const char *fmt, ...) {
+	int error = errno;
+	va_list ap;
+	va_start(ap, fmt);
+	fputs("hexdump: ", stderr);
+	vfprintf(stderr, fmt, ap);
+	fprintf(stderr, ": %s\n", strerror(error));
+	va_end(ap);
+	exit(eval);
+}
+
+static void errx(int eval, const char *fmt, ...) {
+	va_list ap;
+	va_start(ap, fmt);
+	fputs("hexdump: ", stderr);
+	vfprintf(stderr, fmt, ap);
+	fputc('\n', stderr);
+	va_end(ap);
+	exit(eval);
+}
+#endif
 
 
 static void run(struct hexdump *X, FILE *fp, _Bool flush) {
@@ -1940,10 +1973,10 @@ int main(int argc, char **argv) {
 	argv += optind;
 
 	if (!(X = hxd_open(&error)))
-		OOPS("open: %s", hxd_strerror(error));
+		errx(EXIT_FAILURE, "open: %s", hxd_strerror(error));
 
 	if ((error = hxd_compile(X, fmt, flags)))
-		OOPS("%s: %s", fmt, hxd_strerror(error));
+		errx(EXIT_FAILURE, "%s: %s", fmt, hxd_strerror(error));
 
 	if (dump) {
 		vm_dump(&X->vm, stdout);
@@ -1952,6 +1985,9 @@ int main(int argc, char **argv) {
 	}
 
 	if (!argc) {
+#ifdef _WIN32
+		_setmode(_fileno(stdin), _O_BINARY);
+#endif
 		run(X, stdin, 1);
 	} else {
 		int i;
@@ -1959,7 +1995,7 @@ int main(int argc, char **argv) {
 		for (i = 0; i < argc; i++) {
 			FILE *fp;
 
-			if (!(fp = fopen(argv[i], "r")))
+			if (!(fp = fopen(argv[i], "rb")))
 				err(EXIT_FAILURE, "%s", argv[i]);
 
 			run(X, fp, !argv[i + 1]);

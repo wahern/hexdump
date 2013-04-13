@@ -1,0 +1,150 @@
+Building Hexdump on Windows
+===========================
+
+With some care, hexdump may be built on Windows 32 or 64 bit, any
+version on which GCC can be installed via MinGW. These instructions
+were tested on 64-bit Windows 7 Professional. These instructions
+produce 32-bit executable and DLLs. Building 64-bit executables is
+likely to be possible by following a very similar recipe, but has not
+been tested.
+
+Prerequisites
+-------------
+
+* MinGW GCC
+
+http://www.mingw.org/
+
+Get GCC neatly packaged from the MinGW project. Their package is
+configured to build native Windows executables that depend only on the
+version of the C runtime library that ships as part of Windows itself,
+`MSVCRT.DLL`.
+
+* GNU Make
+
+If you installed a recent MinGW GCC, then a suitable make was
+installed for you under the name `mingw32-make`. Use that anywhere
+these instructions say "make".
+
+Otherwise, GNU Make of at least version 3.81 is assumed. The GnuWin32
+project has a decent package.
+
+* GnuWin32 Utilities
+
+http://gnuwin32.sourceforge.net/packages.html
+
+Installing their CoreUtils package will provide you with `ls`, `rm`,
+`cp`, and lots of other Unix shell commands that makefiles typically
+assume will be available, without the burden of a complete Unix-like
+environment such as Cygwin.
+
+
+Configure and Build
+-------------------
+
+Edit the Makefile.mingw and set the value of `LUADIR`, `LUAINC`, and
+`LUALIBS` to the location where your preferred version of Lua or
+LuaJIT can be found. You will need a matched set of include files and
+DLL. 
+
+Note that Make and compiler toolchain will get confused by file and
+folder names that contain spaces and some other characters.
+Unfortunately, Microsoft decided that the proper name in which to
+install 32-bit programs on 64-bit Windows was `C:\Program Files (x86)`
+which manages to provide both sources of confusion. To avoid this, the
+starting value of `LUADIR` in `Makefile.mingw` is
+`C:\PROGRA~2\Lua\5.1` which side steps the issue using the 8.3 short
+name for the offending folder.
+
+If you won't be using the Lua module, then you likely will not need to
+configure anything in `Makefile.mingw`.
+
+Build with the command
+
+    mingw32-make -f Makefile.mingw
+
+which will build `hexdump.exe`, `libhexdump.dll` (the library version)
+and `hexdump.dll` (the Lua module).
+
+
+Test
+----
+
+Verify that it runs:
+
+	C:...>hexdump -h
+	hexdump [-bcCde:f:oxBLDVh] [file ...]
+	  -b       one-byte octal display
+	  -c       one-byte character display
+	  -C       canonical hex+ASCII display
+	  -d       two-byte decimal display
+	  -e FMT   hexdump string format
+	  -f PATH  path to hexdump format file
+	  -o       two-byte octal display
+	  -x       two-byte hexadecimal display
+	  -B       load words big-endian
+	  -L       load words little-endian
+	  -D       dump the compiled machine
+	  -V       print version
+	  -h       print usage help
+
+Verify that `stdin` is in binary mode:
+
+	C:...>echo abc | hexdump -C
+	00000000  61 62 63 20 0d 0a                                 |abc ..|
+
+Verify that Lua can see it and the module works:
+
+	Lua 5.1.4  Copyright (C) 1994-2008 Lua.org, PUC-Rio
+	> hd = require"hexdump"
+	> = hd(hd.C, "abc")
+	00000000  61 62 63                                          |abc|
+
+	> = hd(hd.x, hd.BIG_ENDIAN, "abcd")
+	0000000    6162    6364
+
+	> = hd(hd.x, "abcd")
+	0000000    6261    6463
+
+	>
+
+Lua and C Runtime on Windows
+----------------------------
+
+There are several sources of Lua on Windows systems. Google will
+easily lead you to all of them. These note have been tested based on
+the Lua for Windows release:
+
+http://code.google.com/p/luaforwindows/
+
+which is a neatly packaged collection of Lua modules ported to Windows
+and all carefully built with the same conventions.
+
+When building for Lua on Windows, one has to be careful to not mix
+different C runtime libraries, or to end up with multiple copies of
+the Lua core.
+
+Unfortunately, Lua for Windows was built using the C runtime libraries
+corresponding to Visual C 2005, which is relatively out of date today,
+and which requires that every executable and DLL using it must supply
+a correct manifest resource that names it. Generating a correct
+manifest outside of the official Microsoft Visual Studio environment
+is a tricky process.
+
+Fortunately, testing shows that as long as `hexdump.dll` is linked
+against the correct Lua DLL (in this case `lua5.1.dll` provided by Lua
+for Windows) there appears to be no problems caused by `hexdump.dll`
+linked to the standard MinGW choice of C runtime. 
+
+I believe this is because hexdump carefully allows Lua to correctly
+allocate all strings returned to the Lua program, and otherwise
+manages all other allocations by storing pointers returned from its
+malloc() in full userdata so that they may be returned to its version
+of free() later. Further, the module API passes data in and out solely
+as Lua strings, any actual file IO is the responsibility of the
+calling program. That insulates the module from the other source of
+trouble with mixing runtimes: file handles opened in one runtime must
+not be passed to any other runtime library or weird things will likely
+happen.
+
+

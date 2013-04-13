@@ -1,0 +1,44 @@
+# Makefile for GNU Make 3.81 or better on Windows, compiling with GCC
+# from MinGW. Tested with GNU Make 3.81 and GCC 4.7.2 on 64-bit
+# Windows 7 Professional.
+
+# Define LUADIR either by editing the value here or by setting it in
+# your environment or on the make command line. The default value here
+# is a likely location if Lua for Windows is installed on 64-bit
+# Windows 7 in the usual way. Note that due to quoting issues in both
+# make, CMD.EXE, and the GCC toolchain you will be happiest if you
+# avoid spaces and funny characters like parenthesis in this
+# pathname. An easy way to do that is to use 8.3 shortnames for any
+# bits that are problematic, as we've done here for the long name of
+# C:\Program Files (x86), using the equivalent C:\PROGRA~2. You can
+# learn the short names of files and folders with the DIR/X command.
+#
+LUADIR ?= C:\PROGRA~2\Lua\5.1
+
+# Verify that the LUAINC is the location of lua.h and lauxlib.h and
+# that the DLL named by LUALIBS is the matching version of Lua.
+#
+LUAINC = "-I$(LUADIR)/include"
+LUALIBS = "$(LUADIR)/lib/lua5.1.dll"
+
+CC ?= gcc
+CFLAGS = -std=c99 -g -O2 -Wall -Wextra -Werror -Wno-unused-variable -Wno-unused-parameter
+DLLFLAGS += -shared
+
+.PHONY: clean all
+
+all: hexdump.exe libhexdump.dll hexdump.dll 
+
+hexdump.exe: hexdump.c hexdump.h
+	$(CC) $(CFLAGS) -o $@ $< $(CPPFLAGS) -DHEXDUMP_MAIN
+
+hexdump.dll: hexdump.c hexdump.h
+	$(CC) $(CFLAGS) $(DLLFLAGS) -o $@ $< $(CPPFLAGS) $(LUAINC) -DHEXDUMP_LUALIB $(LUALIBS)
+
+libhexdump.dll: hexdump.c hexdump.h
+	$(CC) $(CFLAGS) $(DLLFLAGS) -o $@ $< $(CPPFLAGS)
+
+
+clean:
+	-rm -f hexdump.exe hexdump.dll libhexdump.dll
+	-rm -f *.o *.a

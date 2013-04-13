@@ -35,7 +35,7 @@
 #define HXD_VERSION HXD_V_REL
 #define HXD_VENDOR "william@25thandClement.com"
 
-#define HXD_V_REL 0x20130211
+#define HXD_V_REL 0x20130412
 #define HXD_V_ABI 0x20130210
 #define HXD_V_API 0x20130211
 
