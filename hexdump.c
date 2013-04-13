@@ -356,6 +356,8 @@ enum vm_opcode {
 	OP_SUB,   /* 2/1 | S(-2) - S(-1) */
 	OP_ADD,   /* 2/1 | S(-2) + S(-1) */
 	OP_NOT,   /* 1/1 | logical not */
+	OP_OR,    /* 2/1 | logical or */
+	OP_LT,    /* 2/1 | S(-2) < S(-1) */
 	OP_POP,   /* 1/0 | pop top of stack */
 	OP_DUP,   /* 1/2 | dup top of stack */
 	OP_SWAP,  /* 2/2 | swap values at top of stack */
@@ -408,6 +410,8 @@ static const char *vm_strop(enum vm_opcode op) {
 		[OP_SUB]    = "SUB",
 		[OP_ADD]    = "ADD",
 		[OP_NOT]    = "NOT",
+		[OP_OR]     = "OR",
+		[OP_LT]     = "LT",
 		[OP_POP]    = "POP",
 		[OP_DUP]    = "DUP",
 		[OP_SWAP]   = "SWAP",
@@ -737,7 +741,7 @@ static void vm_exec(struct vm_state *M) {
 	static const void *const jump[] = {
 		L(HALT), L(NOOP), L(TRAP), L(PC), L(TRUE), L(FALSE),
 		L(ZERO), L(ONE), L(TWO), L(I8), L(I16), L(I32),
-		L(NEG), L(SUB), L(ADD), L(NOT),
+		L(NEG), L(SUB), L(ADD), L(NOT), L(OR), L(LT),
 		L(POP), L(DUP), L(SWAP), L(READ), L(COUNT), L(PUTC), L(CONV),
 		L(CHOP), L(PAD), L(JMP), L(RESET),
 		L(2XBYTE), L(PBYTE), L(7XADDR), L(8XADDR),
@@ -823,6 +827,22 @@ static void vm_exec(struct vm_state *M) {
 		vm_push(M, !vm_pop(M));
 
 		NEXT;
+	CASE(OR): {
+		int64_t b = vm_pop(M);
+		int64_t a = vm_pop(M);
+
+		vm_push(M, a || b);
+
+		NEXT;
+	}
+	CASE(LT): {
+		int64_t b = vm_pop(M);
+		int64_t a = vm_pop(M);
+
+		vm_push(M, a < b);
+
+		NEXT;
+	}
 	CASE(POP):
 		vm_pop(M);
 
@@ -1046,10 +1066,10 @@ static void emit_link(struct vm_state *M, int from, int to) {
 } /* emit_link() */
 
 
-static void emit_unit(struct vm_state *M, int loop, int limit, size_t *blocksize, const unsigned char **fmt) {
+static void emit_unit(struct vm_state *M, int loop, int limit, int flags, size_t *blocksize, const unsigned char **fmt) {
 	_Bool quoted = 0, escaped = 0;
 	int consumes = 0, chop = 0;
-	int L1, L2, from, ch;
+	int L1, L2, C1 = 0, from, ch;
 
 	loop = (loop < 0)? 1 : loop;
 
@@ -1063,6 +1083,14 @@ static void emit_unit(struct vm_state *M, int loop, int limit, size_t *blocksize
 	emit_op(M, OP_SWAP);
 	emit_op(M, OP_SUB); /* loop - counter */
 	emit_op(M, OP_NOT);
+	if (flags & HXD_NOPADDING) {
+		emit_op(M, OP_COUNT);
+		C1 = M->pc; /* patch destination for unit size */
+		emit_op(M, OP_TRAP);
+		emit_op(M, OP_TRAP);
+		emit_op(M, OP_LT);
+		emit_op(M, OP_OR);
+	}
 	emit_jmp(M, &L2);
 
 	emit_int(M, 1);
@@ -1227,6 +1255,15 @@ epilog:
 		consumes = limit;
 	}
 
+	if (flags & HXD_NOPADDING) {
+		if (consumes > 255)
+			vm_throw(M, ERANGE);
+
+		/* patch in our unit size */
+		M->code[C1 + 0] = OP_I8;
+		M->code[C1 + 1] = consumes;
+	}
+
 	emit_op(M, OP_TRUE);
 	emit_jmp(M, &from);
 	emit_link(M, from, L1);
@@ -1318,8 +1355,10 @@ int hxd_compile(struct hexdump *X, const char *_fmt, int flags) {
 	}
 
 	while (skipws(&fmt, 1)) {
-		int lc, loop, limit;
+		int lc, loop, limit, flags;
 		size_t blocksize = 0;
+
+		flags = X->vm.flags;
 
 		emit_op(&X->vm, OP_RESET);
 
@@ -1329,12 +1368,17 @@ int hxd_compile(struct hexdump *X, const char *_fmt, int flags) {
 			if ('/' == skipws(&fmt, 0)) {
 				fmt++;
 				limit = getint(&fmt);
+	
+				if (*fmt == '?') {
+					flags |= HXD_NOPADDING;
+					fmt++;
+				}
 			} else {
 				limit = -1;
 			}
 
 			skipws(&fmt, 0);
-			emit_unit(&X->vm, loop, limit, &blocksize, &fmt);
+			emit_unit(&X->vm, loop, limit, flags, &blocksize, &fmt);
 		} while ((lc = skipws(&fmt, 0)) && lc != '\n');
 
 		if (blocksize > X->vm.blocksize)
@@ -1876,7 +1920,7 @@ int main(int argc, char **argv) {
 	size_t len;
 	int error;
 
-	while (-1 != (opt = getopt(argc, argv, "bcCde:f:oxBLDVh"))) {
+	while (-1 != (opt = getopt(argc, argv, "bcCde:f:oxiBLPDVh"))) {
 		switch (opt) {
 		case 'b':
 			fmt = HEXDUMP_b;
@@ -1921,12 +1965,20 @@ int main(int argc, char **argv) {
 			fmt = HEXDUMP_x;
 
 			break;
+		case 'i':
+			fmt = HEXDUMP_i;
+
+			break;
 		case 'B':
 			flags |= HXD_BIG_ENDIAN;
 
 			break;
 		case 'L':
 			flags |= HXD_LITTLE_ENDIAN;
+
+			break;
+		case 'P':
+			flags |= HXD_NOPADDING;
 
 			break;
 		case 'D':
@@ -1955,8 +2007,10 @@ int main(int argc, char **argv) {
 				"  -f PATH  path to hexdump format file\n" \
 				"  -o       two-byte octal display\n" \
 				"  -x       two-byte hexadecimal display\n" \
+				"  -i       one-byte hexadecimal like xxd -i\n" \
 				"  -B       load words big-endian\n" \
 				"  -L       load words little-endian\n" \
+				"  -P       disable padding\n" \
 				"  -D       dump the compiled machine\n" \
 				"  -V       print version\n" \
 				"  -h       print usage help\n" \

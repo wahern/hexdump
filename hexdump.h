@@ -37,7 +37,7 @@
 
 #define HXD_V_REL 0x20130412
 #define HXD_V_ABI 0x20130210
-#define HXD_V_API 0x20130211
+#define HXD_V_API 0x20130412
 
 int hxd_version(void);
 const char *hxd_vendor(void);
@@ -108,6 +108,7 @@ void hxd_reset(struct hexdump *);
 #define HXD_NETWORK        HXD_BIG_ENDIAN
 #define HXD_BIG_ENDIAN     0x01
 #define HXD_LITTLE_ENDIAN  0x02
+#define HXD_NOPADDING      0x04
 
 hxd_error_t hxd_compile(struct hexdump *, const char *, int);
 
@@ -125,7 +126,7 @@ size_t hxd_read(struct hexdump *, void *, size_t);
 /*
  * H E X D U M P  C O M M O N  F O R M A T S
  *
- * Predefined formats for hexdump(1) -b, -c, -C, -d, -o, and -x.
+ * Predefined formats for hexdump(1) -b, -c, -C, -d, -o, -x, and xxd(1) -i.
  *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
@@ -136,6 +137,8 @@ size_t hxd_read(struct hexdump *, void *, size_t);
 #define HEXDUMP_d "\"%07.7_ax \" 8/2 \"  %05u \" \"\\n\""
 #define HEXDUMP_o "\"%07.7_ao   \" 8/2 \" %06o \" \"\\n\""
 #define HEXDUMP_x "\"%07.7_ax \" 8/2 \"   %04x \" \"\\n\""
+
+#define HEXDUMP_i "\"  \" 12/1? \"0x%02x, \" \"\\n\""
 
 
 /*
@@ -152,6 +155,10 @@ size_t hxd_read(struct hexdump *, void *, size_t);
  *   hexdump.LITTLE_ENDIAN
  *     Bitwise flags which configure word byte order. The default is the
  *     native byte order.
+ *
+ *   hexdump.NOPADDING
+ *     Bitwise flag which disables padding; instead, formatting units are
+ *     skipped entirely when the block buffer is too short.
  *
  *   hexdump.b 
  *   hexdump.c
