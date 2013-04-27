@@ -22,7 +22,7 @@ LUAINC = "-I$(LUADIR)/include"
 LUALIBS = "$(LUADIR)/lib/lua5.1.dll"
 
 CC ?= gcc
-CFLAGS = -std=c99 -g -O2 -Wall -Wextra -Werror -Wno-unused-variable -Wno-unused-parameter
+CFLAGS = -std=gnu99 -g -O2 -Wall -Wextra -Werror -Wno-unused-variable -Wno-unused-parameter
 DLLFLAGS += -shared
 
 .PHONY: clean all

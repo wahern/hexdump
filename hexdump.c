@@ -1865,6 +1865,7 @@ int luaopen_hexdump() {
 #include <err.h>    /* err(3) errx(3) */
 #else
 #include <stdarg.h>
+#include <fcntl.h>  /* _O_BINARY */
 
 static void err(int eval, const char *fmt, ...) {
 	int error = errno;
