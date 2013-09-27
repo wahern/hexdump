@@ -796,8 +796,8 @@ static void vm_exec(struct vm_state *M) {
 		NEXT;
 	CASE(I32):
 		v = M->code[++M->pc] << 24;
-		v = M->code[++M->pc] << 16;
-		v = M->code[++M->pc] << 8;
+		v |= M->code[++M->pc] << 16;
+		v |= M->code[++M->pc] << 8;
 		v |= M->code[++M->pc];
 
 		vm_push(M, v);
