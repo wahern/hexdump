@@ -1730,7 +1730,6 @@ static int hxdL_read(lua_State *L) {
 	struct hexdump *X = hxdL_checkudata(L, 1);
 	luaL_Buffer B;
 	size_t count;
-	int error;
 
 	luaL_buffinit(L, &B);
 
