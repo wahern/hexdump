@@ -1302,7 +1302,7 @@ struct hexdump *hxd_open(int *error) {
 
 	hxd_init(X);
 
-	return X;	
+	return X;
 syerr:
 	*error = errno;
 
@@ -1335,7 +1335,7 @@ void hxd_reset(struct hexdump *X) {
 } /* hxd_reset() */
 
 
-int hxd_compile(struct hexdump *X, const char *_fmt, int flags) {
+int hxd_compile(struct hexdump *X, const char * volatile _fmt, int flags) {
 	const unsigned char *fmt = (const unsigned char *)_fmt;
 	unsigned char *tmp;
 	int error;
@@ -1368,7 +1368,7 @@ int hxd_compile(struct hexdump *X, const char *_fmt, int flags) {
 			if ('/' == skipws(&fmt, 0)) {
 				fmt++;
 				limit = getint(&fmt);
-	
+
 				if (*fmt == '?') {
 					flags |= HXD_NOPADDING;
 					fmt++;
@@ -1416,7 +1416,7 @@ const char *hxd_help(struct hexdump *X) {
 } /* hxd_help() */
 
 
-int hxd_write(struct hexdump *X, const void *src, size_t len) {
+int hxd_write(struct hexdump *X, const void * volatile src, size_t len) {
 	const unsigned char *p, *pe;
 	size_t n;
 	int error;

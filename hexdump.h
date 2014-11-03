@@ -110,13 +110,13 @@ void hxd_reset(struct hexdump *);
 #define HXD_LITTLE_ENDIAN  0x02
 #define HXD_NOPADDING      0x04
 
-hxd_error_t hxd_compile(struct hexdump *, const char *, int);
+hxd_error_t hxd_compile(struct hexdump *,  const char * volatile , int);
 
 const char *hxd_help(struct hexdump *);
 
 size_t hxd_blocksize(struct hexdump *);
 
-hxd_error_t hxd_write(struct hexdump *, const void *, size_t);
+hxd_error_t hxd_write(struct hexdump *, const void * volatile , size_t);
 
 hxd_error_t hxd_flush(struct hexdump *);
 
@@ -149,7 +149,7 @@ size_t hxd_read(struct hexdump *, void *, size_t);
  *
  *   local hexdump = require"hexdump"
  *
- *   hexdump.NATIVE 
+ *   hexdump.NATIVE
  *   hexdump.NETWORK
  *   hexdump.BIG_ENDIAN
  *   hexdump.LITTLE_ENDIAN
@@ -160,7 +160,7 @@ size_t hxd_read(struct hexdump *, void *, size_t);
  *     Bitwise flag which disables padding; instead, formatting units are
  *     skipped entirely when the block buffer is too short.
  *
- *   hexdump.b 
+ *   hexdump.b
  *   hexdump.c
  *   hexdump.C
  *   hexdump.d
@@ -206,7 +206,7 @@ size_t hxd_read(struct hexdump *, void *, size_t);
  *
  *   :read()
  *     Drains and returns the output buffer as a string.
- * 
+ *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 int luaopen_hexdump(/* pointer to lua_State */);
