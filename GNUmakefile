@@ -17,13 +17,27 @@ CP ?= cp
 VENDOR_OS ?= $(shell mk/vendor.os)
 VENDOR_CC ?= $(shell mk/vendor.cc)
 
-ifeq ($(SOFLAGS),)
-ifeq ($(VENDOR_OS), Darwin)
-SOFLAGS = -bundle -undefined dynamic_lookup
+
+ifeq ($(CFLAGS),)
+ifeq ($(VENDOR.CC), sunpro)
+CFLAGS = -g
 else
-SOFLAGS = -shared
+CFLAGS = -std=c99 -g -O2 -Wall -Wextra -Werror
 endif
+endif # ifeq ($(CFLAGS),)
+
+ifeq ($(SOFLAGS),)
+ifeq ($(VENDOR.CC), sunpro)
+SOFLAGS += -xcode=pic13
+else
+SOFLAGS += -fPIC
 endif
+ifeq ($(VENDOR_OS), Darwin)
+SOFLAGS += -bundle -undefined dynamic_lookup
+else
+SOFLAGS += -shared
+endif
+endif # ifeq ($(SOFLAGS),)
 
 
 all: hexdump
