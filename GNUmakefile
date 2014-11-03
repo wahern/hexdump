@@ -26,7 +26,7 @@ endif
 endif
 
 
-all:
+all: hexdump
 
 .PHONY: config
 
@@ -47,6 +47,12 @@ config:
 	printf 'CP ?= $(value CP)'"\n" >> .config
 	printf 'VENDOR_OS ?= $(value VENDOR_OS)'"\n" >> .config
 	printf 'VENDOR_CC ?= $(value VENDOR_CC)'"\n" >> .config
+
+hexdump: hexdump.c hexdump.h
+	$(CC) $(CFLAGS) -o $@ $< $(CPPFLAGS) -DHEXDUMP_MAIN
+
+libhexdump.so: hexdump.c hexdump.h
+	$(CC) $(CFLAGS) -o $@ $< $(CPPFLAGS) $(SOFLAGS)
 
 LUAPATH = $(shell env CC="$(CC)" CPPFLAGS="$(CPPFLAGS)" LDFLAGS="$(LDFLAGS)" mk/luapath -krxm3 $(if $(includedir),$(if $(DESTDIR), -I$(DESTDIR)$(includedir)) -I$(includedir)) -I/usr/include -I/usr/local/include $(if $(DESTDIR),-P$(DESTDIR)$(bindir)) -P$(bindir) -v$(1) $(2))
 
