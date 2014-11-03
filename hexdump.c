@@ -724,10 +724,11 @@ static void vm_conv(struct vm_state *M, int flags, int width, int prec, int fc, 
 #define VM_FASTER defined(__GNUC__)
 
 #if VM_FASTER
-#define BEGIN goto *jump[M->code[M->pc]]
+#define GNUX(...) (__extension__ ({ __VA_ARGS__; })) /* quiet compiler diagnostics */
+#define BEGIN GNUX(goto *jump[M->code[M->pc]])
 #define END (void)0
 #define CASE(op) XPASTE(OP_, op)
-#define NEXT goto *jump[M->code[++M->pc]]
+#define NEXT GNUX(goto *jump[M->code[++M->pc]])
 #else
 #define BEGIN exec: switch (M->code[M->pc]) {
 #define END } (void)0
@@ -737,7 +738,7 @@ static void vm_conv(struct vm_state *M, int flags, int width, int prec, int fc, 
 
 static void vm_exec(struct vm_state *M) {
 #if VM_FASTER
-#define L(L) (&&XPASTE(OP_, L))
+#define L(L) (__extension__ &&XPASTE(OP_, L))
 	static const void *const jump[] = {
 		L(HALT), L(NOOP), L(TRAP), L(PC), L(TRUE), L(FALSE),
 		L(ZERO), L(ONE), L(TWO), L(I8), L(I16), L(I32),
@@ -927,7 +928,7 @@ static void vm_exec(struct vm_state *M) {
 		if (vm_pop(M)) {
 			M->pc = pc % countof(M->code);
 #if VM_FASTER
-			goto *jump[M->code[pc]];
+			GNUX(goto *jump[M->code[pc]]);
 #else
 			goto exec;
 #endif
@@ -1100,7 +1101,6 @@ static void emit_unit(struct vm_state *M, int loop, int limit, int flags, size_t
 		switch (ch) {
 		case '%': {
 			int fc, flags, width, prec, bytes;
-			int from;
 
 			if (escaped)
 				goto copyout;
@@ -1412,6 +1412,7 @@ size_t hxd_blocksize(struct hexdump *X) {
 
 
 const char *hxd_help(struct hexdump *X) {
+	(void)X;
 	return "helps";
 } /* hxd_help() */
 
@@ -1919,7 +1920,7 @@ int main(int argc, char **argv) {
 	int opt, flags = 0;
 	_Bool dump = 0;
 	struct hexdump *X;
-	char buf[256], *fmt = HEXDUMP_x, fmtbuf[512];
+	char *fmt = HEXDUMP_x, fmtbuf[512];
 	size_t len;
 	int error;
 
