@@ -1701,7 +1701,7 @@ static int hxdL_new(lua_State *L) {
 static int hxdL_compile(lua_State *L) {
 	struct hexdump *X = hxdL_checkudata(L, 1);
 	const char *fmt = luaL_checkstring(L, 2);
-	int flags = luaL_optint(L, 3, 0);
+	int flags = (int)luaL_optinteger(L, 3, 0);
 	int error;
 
 	if ((error = hxd_compile(X, fmt, flags)))
