@@ -27,17 +27,13 @@
 #define _XOPEN_SOURCE 600 /* _setjmp(3), _longjmp(3), getopt(3) */
 #endif
 
+#include <errno.h>  /* ERANGE errno */
 #include <limits.h> /* INT_MAX */
-
+#include <setjmp.h> /* _setjmp(3) _longjmp(3) */
 #include <stdint.h> /* int64_t */
 #include <stdio.h>  /* FILE fprintf(3) snprintf(3) */
 #include <stdlib.h> /* malloc(3) realloc(3) free(3) abort(3) */
-
 #include <string.h> /* memset(3) memmove(3) */
-
-#include <errno.h>  /* ERANGE errno */
-
-#include <setjmp.h> /* _setjmp(3) _longjmp(3) */
 
 #include "hexdump.h"
 
@@ -78,11 +74,41 @@
 #endif
 #endif
 
+#if _MSC_VER && _MSC_VER < 1900 && !defined inline
+#define inline __inline
+#endif
+
+#if _MSC_VER
+#define NARG_OUTER(x) x
+#define NARG_INNER(a, b, c, d, e, f, g, h, N,...) N
+#define NARG(...) NARG_OUTER(NARG_INNER(__VA_ARGS__, 8, 7, 6, 5, 4, 3, 2, 1, 0))
+#else
 #define NARG_(a, b, c, d, e, f, g, h, N,...) N
 #define NARG(...) NARG_(__VA_ARGS__, 8, 7, 6, 5, 4, 3, 2, 1, 0)
+#endif
 
 #define PASTE(x, y) x##y
 #define XPASTE(x, y) PASTE(x, y)
+
+#if _MSC_VER && _MSC_VER < 1900 && !defined snprintf
+#include <stdarg.h> /* va_list va_start va_end */
+
+#define snprintf(...) hxd_snprintf(__VA_ARGS__)
+
+static int (hxd_snprintf)(char *dst, size_t lim, const char *fmt, ...) {
+	va_list ap;
+	int n;
+
+	va_start(ap, fmt);
+	n = _vsnprintf(dst, lim, fmt, ap);
+	va_end(ap);
+
+	if (lim)
+		dst[lim - 1] = '\0';
+
+	return n;
+}
+#endif
 
 
 static unsigned char toprint(unsigned char chr) {
@@ -1856,18 +1882,26 @@ int luaopen_hexdump() {
 #if HEXDUMP_MAIN
 
 #include <stdio.h>  /* FILE stdout stderr stdin fprintf(3) */
-
 #include <string.h> /* strcmp(3) */
 
-#include <unistd.h> /* getopt(3) */
+#ifdef _WIN32
+#include <fcntl.h>  /* _fcntl(3) _setmode(3) _O_BINARY */
+#endif
 
-#ifndef _WIN32
+#ifndef HAVE_ERR
+#define HAVE_ERR (!defined _WIN32)
+#endif
+
+#ifndef HAVE_GETOPT
+#define HAVE_GETOPT (!defined _WIN32)
+#endif
+
+#if HAVE_ERR
 #include <err.h>    /* err(3) errx(3) */
 #else
-#include <stdarg.h>
-#include <fcntl.h>  /* _O_BINARY */
+#include <stdarg.h> /* va_list va_start va_end */
 
-static void err(int eval, const char *fmt, ...) {
+static void warn(const char *fmt, ...) {
 	int error = errno;
 	va_list ap;
 	va_start(ap, fmt);
@@ -1875,19 +1909,105 @@ static void err(int eval, const char *fmt, ...) {
 	vfprintf(stderr, fmt, ap);
 	fprintf(stderr, ": %s\n", strerror(error));
 	va_end(ap);
-	exit(eval);
 }
 
-static void errx(int eval, const char *fmt, ...) {
+static void warnx(const char *fmt, ...) {
 	va_list ap;
 	va_start(ap, fmt);
 	fputs("hexdump: ", stderr);
 	vfprintf(stderr, fmt, ap);
 	fputc('\n', stderr);
 	va_end(ap);
-	exit(eval);
 }
-#endif
+
+#define err(status, ...) (warn(__VA_ARGS__), exit((status)))
+#define errx(status, ...) (warnx(__VA_ARGS__), exit((status)))
+
+#endif /* HAVE_ERR */
+
+#if HAVE_GETOPT
+#include <unistd.h> /* getopt(3) */
+#else
+char *optarg;
+int opterr = 1, optind = 1, optopt;
+
+#define ENTER                                                           \
+	do {                                                            \
+	static const int pc0 = __LINE__;                                \
+	switch (pc0 + pc) {                                             \
+	case __LINE__: (void)0
+
+#define SAVE_AND_DO(do_statement)                                       \
+	do {                                                            \
+		pc = __LINE__ - pc0;                                    \
+		do_statement;                                           \
+		case __LINE__: (void)0;                                 \
+	} while (0)
+
+#define YIELD(rv)                                                       \
+	SAVE_AND_DO(return (rv))
+
+#define LEAVE                                                           \
+	SAVE_AND_DO(break);                                             \
+	}                                                               \
+	} while (0)
+
+int getopt(int argc, char *const argv[], const char *shortopts) {
+	static unsigned pc;
+	static char *cp;
+
+	optopt = 0;
+	optarg = NULL;
+
+	ENTER;
+
+	while (optind < argc) {
+		cp = argv[optind];
+
+		if (*cp != '-' || !strcmp(cp, "-")) {
+			break;
+		} else if (!strcmp(cp, "--")) {
+			optind++;
+			break;
+		}
+
+		for (;;) {
+			char *shortopt;
+
+			if (!(optopt = *++cp)) {
+				optind++;
+				break;
+			} else if (!(shortopt = strchr(shortopts, optopt))) {
+				if (*shortopts != ':' && opterr)
+					warnx("illegal option -- %c", optopt);
+				YIELD('?');
+			} else if (shortopt[1] != ':') {
+				YIELD(optopt);
+			} else if (cp[1]) {
+				optarg = cp;
+				optind++;
+				YIELD(optopt);
+				break;
+			} else if (optind + 1 < argc) {
+				optarg = argv[optind + 1];
+				optind += 2;
+				YIELD(optopt);
+				break;
+			} else {
+				if (*shortopts != ':' && opterr)
+					warnx("option requires an argument -- %c", optopt);
+				optind++;
+				YIELD((*shortopts == ':')? ':' : '?');
+				break;
+			}
+		}
+	}
+
+	LEAVE;
+
+	return -1;
+}
+#endif /* HAVE_GETOPT */
 
 
 static void run(struct hexdump *X, FILE *fp, _Bool flush) {
