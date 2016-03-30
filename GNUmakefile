@@ -138,4 +138,4 @@ clean:
 	$(RM) -fr *.dSYM/
 
 clean~:
-	find . -name *~ -exec rm {} +
+	$(RM) -f *~
