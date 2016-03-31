@@ -141,7 +141,7 @@ install install$(1): $$(DESTDIR)$$(lua$(subst .,,$(1))cpath)/hexdump.so
 .PHONY: uninstall$(1)
 
 uninstall$(1):
-	$$(RM) $$(lua$(subst .,,$(1))cpath)
+	$$(RM) $$(DESTDIR)$$(lua$(subst .,,$(1))cpath)/hexdump.so
 
 uninstall: uninstall$(1)
 
