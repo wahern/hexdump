@@ -1,131 +1,157 @@
--include .config
+all: # default rule
 
-prefix ?= /usr/local
-includedir ?= $(prefix)/include
-libdir ?= $(prefix)/lib
-bindir ?= $(prefix)/bin
+#
+# G N U  M A K E  F U N C T I O N S
+#
 
-luacpath ?=
-lua51cpath ?=
-lua52cpath ?=
-lua53cpath ?=
+# template for invoking luapath script
+LUAPATH = mk/luapath
+LUAPATH_FN = $(shell env CC='$(subst ',\\',$(CC))' CPPFLAGS='$(subst ',\\',$(CPPFLAGS))' LDFLAGS='$(subst ',\\',$(LDFLAGS))' $(LUAPATH) -krxm3 -I '$(subst ',\\',$(DESTDIR)$(includedir))' -I/usr/include -I/usr/local/include -P '$(subst ',\\',$(DESTDIR)$(bindir))' -P '$(subst ',\\',$(bindir))' -L '$(subst ',\\',$(DESTDIR)$(libdir))' -L '$(subst ',\\',$(libdir))' -v$(1) $(2))
 
-RMDIR ?= rmdir
-MKDIR ?= mkdir
-CP ?= cp
+# check whether luapath can locate Lua $(1) headers
+HAVE_API_FN = $(and $(filter $(1),$(call LUAPATH_FN,$(1),version)),$(1)$(info enabling Lua $(1)))
 
-VENDOR_OS ?= $(shell mk/vendor.os)
-VENDOR_CC ?= $(shell mk/vendor.cc)
+# check whether $(1) in LUA_APIS or $(LUA$(1:.=)_CPPFLAGS) is non-empty
+WITH_API_FN = $$(and $$(or $$(filter $(1),$$(LUA_APIS)),$$(LUA$(subst .,,$(1))_CPPFLAGS)),$(1))
 
+#
+# B U I L D  F L A G S
+#
+CP = cp
+RM = rm -f
+RMDIR = rmdir
+MKDIR = mkdir
 
-ifeq ($(CFLAGS),)
-ifeq ($(VENDOR.CC), sunpro)
-CFLAGS = -g
+VENDOR_OS = $(shell mk/vendor.os)
+VENDOR_CC = $(shell mk/vendor.cc)
+
+ALL_CPPFLAGS = $(CPPFLAGS)
+
+ifeq ($(VENDOR_CC), sunpro)
+ALL_CFLAGS = -g -xcode=pic13 $(CFLAGS)
 else
-CFLAGS = -std=c99 -g -O2 -Wall -Wextra -Werror
+ALL_CFLAGS = -fPIC -g -O2 -std=c99 -Wall -Wextra -Werror $(CFLAGS)
 endif
-endif # ifeq ($(CFLAGS),)
 
-ifeq ($(SOFLAGS),)
-ifeq ($(VENDOR.CC), sunpro)
-SOFLAGS += -xcode=pic13
-else
-SOFLAGS += -fPIC
-endif
 ifeq ($(VENDOR_OS), Darwin)
-SOFLAGS += -bundle -undefined dynamic_lookup
+ALL_SOFLAGS = -bundle -undefined dynamic_lookup $(SOFLAGS)
 else
-SOFLAGS += -shared
-endif
-endif # ifeq ($(SOFLAGS),)
-
-
-all: hexdump
-
-.PHONY: config
-
-config:
-	printf 'prefix ?= $(value prefix)'"\n" >| .config
-	printf 'includedir ?= $(value includedir)'"\n" >> .config
-	printf 'libdir ?= $(value libdir)'"\n" >> .config
-	printf 'bindir ?= $(value bindir)'"\n" >> .config
-	printf 'luacpath ?= $(value luacpath)'"\n" >> .config
-	printf 'CC ?= $(value CC)'"\n" >> .config
-	printf 'CPPFLAGS ?= $(value CPPFLAGS)'"\n" >> .config
-	printf 'CFLAGS ?= $(value CFLAGS)'"\n" >> .config
-	printf 'LDFLAGS ?= $(value LDFLAGS)'"\n" >> .config
-	printf 'SOFLAGS ?= $(value SOFLAGS)'"\n" >> .config
-	printf 'RM ?= $(value RM)'"\n" >> .config
-	printf 'RMDIR ?= $(value RMDIR)'"\n" >> .config
-	printf 'MKDIR ?= $(value MKDIR)'"\n" >> .config
-	printf 'CP ?= $(value CP)'"\n" >> .config
-	printf 'VENDOR_OS ?= $(value VENDOR_OS)'"\n" >> .config
-	printf 'VENDOR_CC ?= $(value VENDOR_CC)'"\n" >> .config
-
-hexdump: hexdump.c hexdump.h
-	$(CC) $(CFLAGS) -o $@ $< $(CPPFLAGS) -DHEXDUMP_MAIN
-
-libhexdump.so: hexdump.c hexdump.h
-	$(CC) $(CFLAGS) -o $@ $< $(CPPFLAGS) $(SOFLAGS)
-
-LUAPATH = $(shell env CC="$(CC)" CPPFLAGS="$(CPPFLAGS)" LDFLAGS="$(LDFLAGS)" mk/luapath -krxm3 $(if $(includedir),$(if $(DESTDIR), -I$(DESTDIR)$(includedir)) -I$(includedir)) -I/usr/include -I/usr/local/include $(if $(DESTDIR),-P$(DESTDIR)$(bindir)) -P$(bindir) -v$(1) $(2))
-
-define LUALIB_BUILD
-$(1)/hexdump.so: hexdump.c hexdump.h
-	test "$(1)" = "$$(call LUAPATH, $(1), version)"
-	$$(MKDIR) -p $$(@D)
-	$$(CC) $$(CFLAGS) $$(SOFLAGS) -o $$@ $$< $$(CPPFLAGS) $$(call LUAPATH, $(1), cppflags) -DHEXDUMP_LUALIB
-
-.SECONDARY: all$(1)
-
-all$(1): $(1)/hexdump.so
-
-endef # LUALIB_BUILD
-
-$(eval $(call LUALIB_BUILD,5.1))
-
-$(eval $(call LUALIB_BUILD,5.2))
-
-$(eval $(call LUALIB_BUILD,5.3))
-
-
-define LUALIB_INSTALL
-ifneq ($(filter install install$(1) uninstall uninstall$(1), $(MAKECMDGOALS)),)
-ifeq ($$($(2)),) # define lua5?cpath if empty
-$(2)_dyn = $$(call LUAPATH, $(1), cdir)
-$(2)_sed = $$(shell printf "$$(luacpath)" | sed -ne 's/[[:digit:]].[[:digit:]]/$(1)/p')
-$(2)_lib = $$(libdir)/lua/$(1)
-
-override $(2) = $$(or $$($(2)_dyn), $$($(2)_sed), $$($(2)_lib))
+ALL_SOFLAGS = -shared $(SOFLAGS)
 endif
 
-$$($(2))/hexdump.so: $(1)/hexdump.so
-	$$(MKDIR) -p $$(@D)
-	$$(CP) -fp $$< $$@
+ALL_DYFLAGS = -dynamiclib -undefined error
 
-.SECONDARY: install install$(1)
+LUA_APIS := $(call HAVE_API_FN,5.1) $(call HAVE_API_FN,5.2) $(call HAVE_API_FN,5.3)
+LUA_APIS := $(strip $(LUA_APIS))
 
-install install$(1): $$($(2))/hexdump.so
-
-.PHONY: uninstall uninstall$(1)
-
-uninstall$(1):
-	$(RM) -f $$($(2))/hexdump.so
-
-uninstall: uninstall$(1)
-
-endif # if install or install$(1)
-endef # LUALIB_INSTALL
-
-$(eval $(call LUALIB_INSTALL,5.1,lua51cpath))
-
-$(eval $(call LUALIB_INSTALL,5.2,lua52cpath))
-
-$(eval $(call LUALIB_INSTALL,5.3,lua53cpath))
+# define LUA51_CPPFLAGS, LUA52_CPPFLAGS, etc
+define LUA_CPPFLAGS_template
+LUA$(subst .,,$(1))_CPPFLAGS = $$(and $$(call WITH_API_FN,$(1)),$$(call LUAPATH_FN,$(1),cppflags))
+ALL_LUA$(subst .,,$(1))_CPPFLAGS = $$(LUA$(subst .,,$(1))_CPPFLAGS)
+endef
+$(foreach V,$(strip $(LUA_APIS)),$(eval $(call LUA_CPPFLAGS_template,$(V))))
 
 
 #
-# 
+# I N S T A L L  P A T H S
+#
+prefix = /usr/local
+includedir = $(prefix)/include
+libdir = $(prefix)/lib
+bindir = $(prefix)/bin
+
+luacpath = $(libdir)/lua/$$(V)
+
+# define lua51cpath, lua52cpath, etc
+define LUACPATH_template
+ifneq ($(strip $(luacpath)),)
+lua$(subst .,,$(1))cpath := $(luacpath)
+else
+lua$(subst .,,$(1))cpath := $(or $$(call LUAPATH_FN,$(1),cdir),$$(libdir)/lua/$(1))
+endif
+endef
+$(foreach V,$(strip $(LUA_APIS)),$(eval $(call LUACPATH_template,$(V))))
+
+
+#
+# B U I L D  R U L E S
+#
+hexdump: hexdump.c hexdump.h
+	$(CC) -o $@ $< $(ALL_CFLAGS) -DHEXDUMP_MAIN $(ALL_CPPFLAGS)
+
+libhexdump.so: hexdump.c hexdump.h
+	$(CC) -o $@ $< $(ALL_CFLAGS) $(ALL_CPPFLAGS) $(ALL_SOFLAGS)
+
+libhexdump.dylib: hexdump.c hexdump.h
+	$(CC) -o $@ $< $(ALL_CFLAGS) $(ALL_CPPFLAGS) $(ALL_DYFLAGS)
+
+$(DESTDIR)$(bindir)/hexdump: hexdump
+	$(MKDIR) -p $(@D)
+	$(CP) -fp $< $@
+
+$(DESTDIR)$(libdir)/libhexdump.so: libhexdump.so
+	$(MKDIR) -p $(@D)
+	$(CP) -fp $< $@
+
+$(DESTDIR)$(libdir)/libhexdump.dylib: libhexdump.dylib
+	$(MKDIR) -p $(@D)
+	$(CP) -fp $< $@
+
+.PHONY: uninstall $(DESTDIR)$(bindir)/hexdump-uninstall \
+        $(DESTDIR)$(libdir)/libhexdump.so-uninstall \
+        $(DESTDIR)$(libdir)/libhexdump.dylib-uninstall
+
+$(DESTDIR)$(bindir)/hexdump-uninstall \
+$(DESTDIR)$(libdir)/libhexdump.so-uninstall \
+$(DESTDIR)$(libdir)/libhexdump.dylib-uninstall:
+	$(RM) $(@:%-uninstall=%)
+
+.SECONDARY: all install
+
+all: hexdump
+install: $(DESTDIR)$(bindir)/hexdump
+uninstall: $(DESTDIR)$(bindir)/hexdump-uninstall
+
+ifeq ($(VENDOR_OS), Darwin)
+all: libhexdump.dylib
+install: $(DESTDIR)$(libdir)/libhexdump.dylib
+uninstall: $(DESTDIR)$(libdir)/libhexdump.dylib-uninstall
+else
+all: libhexdump.so
+install: $(DESTDIR)$(libdir)/libhexdump.so
+uninstall: $(DESTDIR)$(libdir)/libhexdump.so-uninstall
+endif
+
+
+define LUALIB_BUILD
+
+$(1)/hexdump.so: hexdump.c hexdump.h
+	$$(MKDIR) -p $$(@D)
+	$$(CC) -o $$@ $$< $$(ALL_CFLAGS) -DHEXDUMP_LUALIB $$(ALL_LUA$(subst .,,$(1))_CPPFLAGS) $$(ALL_SOFLAGS)
+
+$$(DESTDIR)$$(lua$(subst .,,$(1))cpath)/hexdump.so: $(1)/hexdump.so
+	$$(MKDIR) -p $$(@D)
+	$$(CP) -fp $$< $$@
+
+.SECONDARY: all$(1) install$(1)
+
+all all$(1): $(1)/hexdump.so
+install install$(1): $$(DESTDIR)$$(lua$(subst .,,$(1))cpath)/hexdump.so
+
+.PHONY: uninstall$(1)
+
+uninstall$(1):
+	$$(RM) $$(lua$(subst .,,$(1))cpath)
+
+uninstall: uninstall$(1)
+
+endef # LUALIB_BUILD
+
+$(foreach V,$(strip $(LUA_APIS)),$(eval $(call LUALIB_BUILD,$(V))))
+
+
+#
+# C L E A N  T A R G E T S
 #
 .PHONY: clean distclean clean~
 
@@ -137,5 +163,5 @@ clean:
 	$(RM) -fr 5.?/
 	$(RM) -fr *.dSYM/
 
-clean~:
+clean~: clean
 	$(RM) -f *~
