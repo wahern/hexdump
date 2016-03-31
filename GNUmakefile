@@ -47,7 +47,7 @@ LUA_APIS := $(strip $(LUA_APIS))
 # define LUA51_CPPFLAGS, LUA52_CPPFLAGS, etc
 define LUA_CPPFLAGS_template
 LUA$(subst .,,$(1))_CPPFLAGS = $$(and $$(call WITH_API_FN,$(1)),$$(call LUAPATH_FN,$(1),cppflags))
-ALL_LUA$(subst .,,$(1))_CPPFLAGS = $$(LUA$(subst .,,$(1))_CPPFLAGS)
+ALL_LUA$(subst .,,$(1))_CPPFLAGS = $$(LUA$(subst .,,$(1))_CPPFLAGS) $$(ALL_CPPFLAGS)
 endef
 $(foreach V,$(strip $(LUA_APIS)),$(eval $(call LUA_CPPFLAGS_template,$(V))))
 
