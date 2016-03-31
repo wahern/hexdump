@@ -127,7 +127,7 @@ define LUALIB_BUILD
 
 $(1)/hexdump.so: hexdump.c hexdump.h
 	$$(MKDIR) -p $$(@D)
-	$$(CC) -o $$@ $$< $$(ALL_CFLAGS) -DHEXDUMP_LUALIB $$(ALL_LUA$(subst .,,$(1))_CPPFLAGS) $$(ALL_SOFLAGS)
+	$$(CC) -o $$@ $$< $$(ALL_CFLAGS) -DHEXDUMP_LUALIB -DWITH_LUA_VERSION_NUM=$(subst .,0,$(1)) $$(ALL_LUA$(subst .,,$(1))_CPPFLAGS) $$(ALL_SOFLAGS)
 
 $$(DESTDIR)$$(lua$(subst .,,$(1))cpath)/hexdump.so: $(1)/hexdump.so
 	$$(MKDIR) -p $$(@D)

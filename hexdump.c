@@ -1577,6 +1577,10 @@ int hxd_v_api(void) {
 #include <lua.h>
 #include <lauxlib.h>
 
+#if WITH_LUA_VERSION_NUM && WITH_LUA_VERSION_NUM != LUA_VERSION_NUM
+#error Lua headers do not implement expected API
+#endif
+
 #define HEXDUMP_CLASS "HEXDUMP*"
 
 
