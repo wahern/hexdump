@@ -41,7 +41,7 @@ endif
 
 ALL_DYFLAGS = -dynamiclib -undefined error
 
-LUA_APIS := $(call HAVE_API_FN,5.1) $(call HAVE_API_FN,5.2) $(call HAVE_API_FN,5.3)
+LUA_APIS := $(or $(strip $(LUA_APIS)),$(call HAVE_API_FN,5.1) $(call HAVE_API_FN,5.2) $(call HAVE_API_FN,5.3))
 LUA_APIS := $(strip $(LUA_APIS))
 
 # define LUA51_CPPFLAGS, LUA52_CPPFLAGS, etc
