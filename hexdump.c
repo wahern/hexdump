@@ -1988,7 +1988,7 @@ int getopt(int argc, char *const argv[], const char *shortopts) {
 			} else if (shortopt[1] != ':') {
 				YIELD(optopt);
 			} else if (cp[1]) {
-				optarg = cp;
+				optarg = &cp[1];
 				optind++;
 				YIELD(optopt);
 				break;
