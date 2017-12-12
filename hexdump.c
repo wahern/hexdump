@@ -2014,17 +2014,25 @@ int getopt(int argc, char *const argv[], const char *shortopts) {
 #endif /* HAVE_GETOPT */
 
 
-static void run(struct hexdump *X, FILE *fp, _Bool flush) {
+static void run(struct hexdump *X, FILE *fp, _Bool flush, size_t off, size_t max) {
 	char buf[256];
 	size_t len;
+	size_t doSz = 0;
 	int error;
+	
+	(void)fseek(fp, off, SEEK_SET);
 
 	while ((len = fread(buf, 1, sizeof buf, fp))) {
+		if (len > (max - doSz)) {
+			len = max - doSz;
+		}
+		doSz += len;
 		if ((error = hxd_write(X, buf, len)))
 			errx(EXIT_FAILURE, "%s", hxd_strerror(error));
 
 		while ((len = hxd_read(X, buf, sizeof buf)))
 			fwrite(buf, 1, len, stdout);
+		if(doSz >= max) break;
 	}
 
 	if (flush) {
@@ -2045,9 +2053,11 @@ int main(int argc, char **argv) {
 	struct hexdump *X;
 	char *fmt = HEXDUMP_x, fmtbuf[512];
 	size_t len;
+	size_t max = (size_t)-1;
+	size_t off = 0;
 	int error;
 
-	while (-1 != (opt = getopt(argc, argv, "bcCde:f:oxiBLPDVh"))) {
+	while (-1 != (opt = getopt(argc, argv, "bcCde:f:n:os:xiBLPDVh"))) {
 		switch (opt) {
 		case 'b':
 			fmt = HEXDUMP_b;
@@ -2084,9 +2094,15 @@ int main(int argc, char **argv) {
 
 			break;
 		}
+		case 'n':
+			max = atoi(optarg);
+			break;
 		case 'o':
 			fmt = HEXDUMP_o;
 
+			break;
+		case 's':
+			off = atoi(optarg);
 			break;
 		case 'x':
 			fmt = HEXDUMP_x;
@@ -2132,7 +2148,9 @@ int main(int argc, char **argv) {
 				"  -d       two-byte decimal display\n" \
 				"  -e FMT   hexdump string format\n" \
 				"  -f PATH  path to hexdump format file\n" \
+				"  -n max   dump maximum size\n" \
 				"  -o       two-byte octal display\n" \
+				"  -s off   offset of file where to dump\n" \
 				"  -x       two-byte hexadecimal display\n" \
 				"  -i       one-byte hexadecimal like xxd -i\n" \
 				"  -B       load words big-endian\n" \
@@ -2169,7 +2187,7 @@ int main(int argc, char **argv) {
 #ifdef _WIN32
 		_setmode(_fileno(stdin), _O_BINARY);
 #endif
-		run(X, stdin, 1);
+		run(X, stdin, 1, 0, max);
 	} else {
 		int i;
 
@@ -2179,7 +2197,7 @@ int main(int argc, char **argv) {
 			if (!(fp = fopen(argv[i], "rb")))
 				err(EXIT_FAILURE, "%s", argv[i]);
 
-			run(X, fp, !argv[i + 1]);
+			run(X, fp, !argv[i + 1], off, max);
 
 			fclose(fp);
 		}
