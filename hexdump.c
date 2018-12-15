@@ -747,7 +747,13 @@ static void vm_conv(struct vm_state *M, int flags, int width, int prec, int fc, 
 } /* vm_conv() */
 
 
-#define VM_FASTER defined(__GNUC__)
+#ifndef VM_FASTER
+#ifdef __GNUC__
+#define VM_FASTER 1
+#else
+#define VM_FASTER 0
+#endif
+#endif
 
 #if VM_FASTER
 #define GNUX(...) (__extension__ ({ __VA_ARGS__; })) /* quiet compiler diagnostics */
@@ -1893,11 +1899,11 @@ int luaopen_hexdump() {
 #endif
 
 #ifndef HAVE_ERR
-#define HAVE_ERR (!defined _WIN32)
+#define HAVE_ERR (!_WIN32)
 #endif
 
 #ifndef HAVE_GETOPT
-#define HAVE_GETOPT (!defined _WIN32)
+#define HAVE_GETOPT (!_WIN32)
 #endif
 
 #if HAVE_ERR
