@@ -1891,7 +1891,10 @@ int luaopen_hexdump() {
 
 #if HEXDUMP_MAIN
 
-#include <stdio.h>  /* FILE stdout stderr stdin fprintf(3) */
+#include <errno.h>  /* ERANGE */
+#include <limits.h> /* LONG_MAX ULONG_MAX */
+#include <stdlib.h> /* strtoul(3) */
+#include <stdio.h>  /* FILE SEEK_SET stdout stderr stdin fprintf(3) fseek(3) */
 #include <string.h> /* strcmp(3) */
 
 #ifdef _WIN32
@@ -2020,25 +2023,27 @@ int getopt(int argc, char *const argv[], const char *shortopts) {
 #endif /* HAVE_GETOPT */
 
 
-static void run(struct hexdump *X, FILE *fp, _Bool flush, size_t off, size_t max) {
+static void run(struct hexdump *X, FILE *fp, _Bool flush, size_t *off, size_t *max) {
 	char buf[256];
 	size_t len;
-	size_t doSz = 0;
 	int error;
-	
-	(void)fseek(fp, off, SEEK_SET);
 
-	while ((len = fread(buf, 1, sizeof buf, fp))) {
-		if (len > (max - doSz)) {
-			len = max - doSz;
-		}
-		doSz += len;
+	/* TODO: need to update the dump address after skipping */
+	if (*off) {
+		long n = MIN(LONG_MAX, *off);
+		if (0 == fseek(fp, n, SEEK_SET))
+			*off -= n;
+		while (*off && (len = fread(buf, 1, MIN(sizeof buf, *off), fp)))
+			*off -= len;
+	}
+
+	while (*max && (len = fread(buf, 1, MIN(sizeof buf, *max), fp))) {
+		*max -= len;
 		if ((error = hxd_write(X, buf, len)))
 			errx(EXIT_FAILURE, "%s", hxd_strerror(error));
 
 		while ((len = hxd_read(X, buf, sizeof buf)))
 			fwrite(buf, 1, len, stdout);
-		if(doSz >= max) break;
 	}
 
 	if (flush) {
@@ -2049,6 +2054,50 @@ static void run(struct hexdump *X, FILE *fp, _Bool flush, size_t off, size_t max
 			fwrite(buf, 1, len, stdout);
 	}
 } /* run() */
+
+
+static size_t tosize(const char *optarg) {
+	unsigned long lu;
+	char *argend;
+
+	errno = 0;
+	lu = strtoul(optarg, &argend, 0);
+	if (lu == ULONG_MAX && errno == ERANGE)
+		err(EXIT_FAILURE, "%s", optarg);
+	if (argend == optarg)
+		errx(EXIT_FAILURE, "%s: invalid number", optarg);
+
+	if (*argend) {
+		unsigned long scale = 0;
+
+		switch (*argend) {
+		case 'b':
+			scale = 512;
+			argend++;
+			break;
+		case 'k':
+			scale = 1024;
+			argend++;
+			break;
+		case 'm':
+			scale = 1048576;
+			argend++;
+			break;
+		}
+
+		if (!scale || *argend)
+			errx(EXIT_FAILURE, "%s: invalid number", optarg);
+
+		if (lu > ULONG_MAX / scale) {
+			errno = ERANGE;
+			err(EXIT_FAILURE, "%s", optarg);
+		}
+
+		lu *= scale;
+	}
+
+	return lu;
+}
 
 
 int main(int argc, char **argv) {
@@ -2101,14 +2150,16 @@ int main(int argc, char **argv) {
 			break;
 		}
 		case 'n':
-			max = atoi(optarg);
+			max = tosize(optarg);
+
 			break;
 		case 'o':
 			fmt = HEXDUMP_o;
 
 			break;
 		case 's':
-			off = atoi(optarg);
+			off = tosize(optarg);
+
 			break;
 		case 'x':
 			fmt = HEXDUMP_x;
@@ -2147,16 +2198,16 @@ int main(int argc, char **argv) {
 			FILE *fp = (opt == 'h')? stdout : stderr;
 
 			fprintf(fp,
-				"hexdump [-bcCde:f:oxBLDVh] [file ...]\n" \
+				"hexdump [-bcCde:f:n:os:xiBLPDVh] [file ...]\n" \
 				"  -b       one-byte octal display\n" \
 				"  -c       one-byte character display\n" \
 				"  -C       canonical hex+ASCII display\n" \
 				"  -d       two-byte decimal display\n" \
 				"  -e FMT   hexdump string format\n" \
 				"  -f PATH  path to hexdump format file\n" \
-				"  -n max   dump maximum size\n" \
+				"  -n NUM   dump maximum size\n" \
 				"  -o       two-byte octal display\n" \
-				"  -s off   offset of file where to dump\n" \
+				"  -s NUM   skip offset bytes\n" \
 				"  -x       two-byte hexadecimal display\n" \
 				"  -i       one-byte hexadecimal like xxd -i\n" \
 				"  -B       load words big-endian\n" \
@@ -2193,7 +2244,7 @@ int main(int argc, char **argv) {
 #ifdef _WIN32
 		_setmode(_fileno(stdin), _O_BINARY);
 #endif
-		run(X, stdin, 1, 0, max);
+		run(X, stdin, 1, &off, &max);
 	} else {
 		int i;
 
@@ -2203,7 +2254,7 @@ int main(int argc, char **argv) {
 			if (!(fp = fopen(argv[i], "rb")))
 				err(EXIT_FAILURE, "%s", argv[i]);
 
-			run(X, fp, !argv[i + 1], off, max);
+			run(X, fp, !argv[i + 1], &off, &max);
 
 			fclose(fp);
 		}
