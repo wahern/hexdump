@@ -1368,7 +1368,7 @@ void hxd_reset(struct hexdump *X) {
 
 
 int hxd_compile(struct hexdump *X, const char *_fmt, int flags) {
-	const unsigned char *fmt = (const unsigned char *)_fmt;
+	const unsigned char *fmt;
 	unsigned char *tmp;
 	int error;
 
@@ -1385,6 +1385,8 @@ int hxd_compile(struct hexdump *X, const char *_fmt, int flags) {
 		u.c = 1;
 		X->vm.flags |= (u.i & 0xff)? HXD_LITTLE_ENDIAN : HXD_BIG_ENDIAN;
 	}
+
+	fmt = (const unsigned char *)_fmt;
 
 	while (skipws(&fmt, 1)) {
 		int lc, loop, limit, flags;
